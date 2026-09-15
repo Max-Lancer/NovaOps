@@ -54,7 +54,10 @@ NovaOps/
 │  ├─ store/                       # 用户、主题、标签页、对话状态
 │  ├─ views/                       # 页面模块
 │  └─ utils/                       # 请求、SSE 等工具
-├─ docker-compose.yml              # Qdrant
+├─ docker-compose.yml              # 一键启动 MySQL + Qdrant + 后端 + 前端
+├─ Dockerfile                      # 前端镜像（Node 构建 + Nginx 托管）
+├─ docker/nginx.conf               # Nginx：SPA 回退、/api 反代、SSE 关闭缓冲
+├─ backend/Dockerfile              # 后端镜像（Maven 构建 + JRE 运行）
 └─ .env.example                    # 环境变量示例
 ```
 
@@ -63,7 +66,7 @@ NovaOps/
 - Node.js 20+ 与 npm
 - Java 17 与 Maven 3.9+
 - MySQL 8
-- Docker（运行 Qdrant 时需要）
+- Docker 与 Docker Compose（一键整体启动时需要；手动模式下仅 Qdrant 需要 Docker）
 - SiliconFlow API Key（知识库向量化和 RAG 问答时需要）
 
 ## 快速开始
@@ -100,7 +103,24 @@ VITE_ENABLE_MOCK=full
 
 新账号通过邮箱注册并激活，默认授予普通成员身份；管理员账号请通过初始化脚本创建（默认 `admin / 123456`）。
 
-### 方式二：运行完整服务
+### 方式二：一条命令容器启动（MySQL + Qdrant + 后端 + 前端）
+
+```bash
+cp .env.docker.example .env    # PowerShell: Copy-Item .env.docker.example .env
+# 编辑 .env，至少填入 NOVAOPS_JWT_SECRET（≥32 字节随机值）
+docker compose up -d
+```
+
+首次启动会构建前后端镜像，并在 MySQL 数据卷首次创建时自动导入 `backend/sql/novaops_init.sql`，完成后访问：
+
+- 前端：`http://127.0.0.1:8088`
+- 后端：`http://127.0.0.1:8090`
+- Qdrant：`http://127.0.0.1:6333`
+- MySQL：`127.0.0.1:13306`（root / `.env` 中的 `NOVAOPS_DB_PASSWORD`）
+
+端口、密钥与 SiliconFlow Key 均通过 `.env` 配置，所有发布端口默认只绑定 `127.0.0.1`；`docker compose down -v` 可清空数据重新初始化。完整命令、排障与镜像结构见 [`docs/DOCKER_GUIDE.md`](docs/DOCKER_GUIDE.md)。
+
+### 方式三：手动运行完整服务
 
 #### 1. 初始化数据库
 
