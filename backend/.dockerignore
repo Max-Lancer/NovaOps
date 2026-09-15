@@ -1,0 +1,15 @@
+# 构建产物与 IDE
+target
+.idea
+*.iml
+.vscode
+
+# 本地密钥与配置：绝不能进入镜像（application-local.yml 含真实数据库密码与 JWT 密钥）
+src/main/resources/application-local.yml
+src/main/resources/application-*.local.yml
+
+# 数据库脚本由 compose 挂载进 MySQL 容器，构建后端镜像时不需要
+sql
+mvn-settings.xml
+Dockerfile
+.dockerignore

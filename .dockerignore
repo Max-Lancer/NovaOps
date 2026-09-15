@@ -1,0 +1,26 @@
+# 前端构建上下文只保留构建所需文件：减小上下文体积，并避免本地密钥进入镜像
+node_modules
+dist
+dist-ssr
+coverage
+
+.git
+.gitignore
+.husky
+.vscode
+.idea
+.worktrees
+.zcode
+docs
+tests
+backend
+
+# 环境变量文件（含数据库密码、JWT 密钥、API Key）一律不进构建上下文
+.env
+.env.*
+
+docker-compose*.yml
+Dockerfile
+.dockerignore
+*.md
+*.log
