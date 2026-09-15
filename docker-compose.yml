@@ -1,13 +1,100 @@
+# NovaOps 一键整体启动：MySQL + Qdrant + 后端 + 前端
+#
+#   docker compose up -d            启动全部服务并构建镜像
+#   docker compose logs -f backend  跟踪某个服务日志
+#   docker compose down             停止（保留数据卷）
+#   docker compose down -v          停止并清空数据（下次启动会重新导入初始化 SQL）
+#
+# 密钥与端口通过仓库根目录的 .env 提供（参考 .env.docker.example），该文件已被 .gitignore 忽略。
+# 所有发布端口默认只绑定 127.0.0.1，避免在局域网暴露本地开发栈。
+
+name: novaops
+
 services:
+  mysql:
+    image: mysql:8.4
+    container_name: novaops-mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${NOVAOPS_DB_PASSWORD:-novaops}
+      MYSQL_DATABASE: novaops
+    ports:
+      - "127.0.0.1:${MYSQL_HOST_PORT:-13306}:3306"
+    volumes:
+      - novaops-mysql-data:/var/lib/mysql
+      # 数据卷为空时首次启动自动导入完整初始化脚本（21 张表 + 预置账号）
+      - ./backend/sql/novaops_init.sql:/docker-entrypoint-initdb.d/01-novaops_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
   qdrant:
     image: qdrant/qdrant:v1.15.4
     container_name: novaops-qdrant
     restart: unless-stopped
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
     volumes:
       - novaops-qdrant-data:/qdrant/storage
 
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: novaops-backend:local
+    container_name: novaops-backend
+    restart: unless-stopped
+    environment:
+      NOVAOPS_DB_URL: jdbc:mysql://mysql:3306/novaops?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=utf8
+      NOVAOPS_DB_USERNAME: root
+      NOVAOPS_DB_PASSWORD: ${NOVAOPS_DB_PASSWORD:-novaops}
+      # 无默认值：必须由 .env 提供，否则 compose 直接报错而不是签发可伪造的 token
+      NOVAOPS_JWT_SECRET: ${NOVAOPS_JWT_SECRET:?请在 .env 中设置 NOVAOPS_JWT_SECRET（至少 32 字节）}
+      QDRANT_BASE_URL: http://qdrant:6333
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-novaops_kb}
+      NOVAOPS_KB_STORAGE: /app/data/kb
+      # 留空时使用占位值：服务可正常启动，知识库向量化与 RAG 问答不可用
+      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-local-not-configured}
+      SILICONFLOW_BASE_URL: ${SILICONFLOW_BASE_URL:-https://api.siliconflow.cn}
+      SILICONFLOW_CHAT_MODEL: ${SILICONFLOW_CHAT_MODEL:-Qwen/Qwen3-8B}
+      SILICONFLOW_EMBEDDING_MODEL: ${SILICONFLOW_EMBEDDING_MODEL:-BAAI/bge-m3}
+      NOVAOPS_AGENT_PLAN_ENABLED: ${NOVAOPS_AGENT_PLAN_ENABLED:-true}
+      NOVAOPS_AGENT_MCP_SERVER_TOKEN: ${NOVAOPS_AGENT_MCP_SERVER_TOKEN:-}
+      MAIL_MODE: ${MAIL_MODE:-log}
+      MAIL_ACTIVATION_BASE_URL: ${MAIL_ACTIVATION_BASE_URL:-http://localhost:8088}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    ports:
+      - "127.0.0.1:${BACKEND_HOST_PORT:-8090}:8090"
+    volumes:
+      - novaops-kb-data:/app/data/kb
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    image: novaops-frontend:local
+    container_name: novaops-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${WEB_HOST_PORT:-8088}:80"
+
 volumes:
+  novaops-mysql-data:
   novaops-qdrant-data:
+  novaops-kb-data:
