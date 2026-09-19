@@ -191,6 +191,13 @@
     order by created_at desc, id desc
   </select>
 
+  <select id="findAttachment" resultType="com.novaops.backend.ticket.model.TicketAttachmentRecord">
+    select id, ticket_id, name, url, size, created_at
+    from biz_ticket_attachment
+    where ticket_id = #{ticketId} and id = #{attachmentId}
+    limit 1
+  </select>
+
   <insert id="insertAttachment" parameterType="com.novaops.backend.ticket.model.TicketAttachmentRecord">
     insert into biz_ticket_attachment (
       id,

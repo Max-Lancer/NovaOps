@@ -34,6 +34,8 @@ export interface SaveKbDto {
 }
 
 export type KbDocumentStatus = 'PARSING' | 'VECTORIZING' | 'READY' | 'FAILED'
-export interface KbDocumentDto { id:string; title:string; fileName:string; fileType:'md'|'pdf'|'doc'|'docx'; fileSize:number; status:KbDocumentStatus; chunkCount:number; errorMsg?:string; createdBy:string; createdAt:string; updatedAt:string }
+export interface KbDocumentDto { id:string; title:string; fileName:string; fileType:'md'|'pdf'|'doc'|'docx'; fileSize:number; status:KbDocumentStatus; chunkCount:number; errorMsg?:string; contentHash?:string; createdBy:string; createdAt:string; updatedAt:string }
 export interface KbChunkDto { id:string; documentId:string; chunkIndex:number; content:string; vectorId:string }
 export interface KbDocumentQueryDto { page:number; pageSize:number; keyword?:string; fileType?:string; status?:KbDocumentStatus }
+export interface KbUploadInitDto { fileName:string; fileSize:number; contentHash:string; chunkSize?:number }
+export interface KbUploadInitResultDto { instant:boolean; sessionId?:string; documentId?:string; uploaded?:number[] }

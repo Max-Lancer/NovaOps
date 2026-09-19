@@ -25,13 +25,14 @@ RUN apt-get update \
 
 WORKDIR /app
 RUN useradd -r -u 10001 -m -d /home/appuser appuser \
-    && mkdir -p /app/data/kb \
+    && mkdir -p /app/data/kb /app/data/attachments \
     && chown -R appuser:appuser /app
 COPY --from=build /build/app.jar /app/app.jar
 RUN chown appuser:appuser /app/app.jar
 
 ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -Dfile.encoding=UTF-8" \
-    NOVAOPS_KB_STORAGE=/app/data/kb
+    NOVAOPS_KB_STORAGE=/app/data/kb \
+    NOVAOPS_TICKET_STORAGE=/app/data/attachments
 
 USER appuser
 EXPOSE 8090

@@ -16,7 +16,6 @@ import type {
   TicketDetailDto,
   TicketListQueryDto,
   UpdateTicketDto,
-  UploadAttachmentDto,
 } from '@/types/ticket'
 import type { DashboardMetricsQueryDto } from '@/types/dashboard'
 import type { KbChunkDto, KbDocumentDto, KbListQueryDto, SaveKbDto } from '@/types/kb'
@@ -85,6 +84,8 @@ const shouldPassthroughTicketBackend = mockMode === 'partial'
 const mockDocuments: KbDocumentDto[] = [{ id:'mock-doc-1',title:'NovaOps 使用手册',fileName:'novaops-guide.md',fileType:'md',fileSize:4096,status:'READY',chunkCount:2,createdBy:'u-admin',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString() }]
 const mockChunks: Record<string,KbChunkDto[]> = { 'mock-doc-1': [{id:'chunk-1',documentId:'mock-doc-1',chunkIndex:0,content:'NovaOps 是企业知识与运维协作平台。',vectorId:'vector-1'},{id:'chunk-2',documentId:'mock-doc-1',chunkIndex:1,content:'知识库文档支持 RAG 检索并附带来源引用。',vectorId:'vector-2'}] }
 const mockConversations: ConversationDto[] = []
+// 分片上传会话（Mock）：记录已接收的分片序号，用于验证续传进度与秒传判定
+const mockUploadSessions = new Map<string,{fileName:string;fileSize:number;contentHash:string;chunks:Set<number>}>()
 const getSession = (request: Request) => {
   return getSessionFromAccessToken(request.headers.get('Authorization'))
 }
@@ -493,15 +494,28 @@ export const handlers = [
     if (!session) {
       return fail(401, 'token 无效')
     }
-    const payload = (await request.json()) as UploadAttachmentDto
-    if (!payload.filename) {
-      return fail(400, '附件名称不能为空')
+    const form = await request.formData()
+    const file = form.get('file')
+    if (!(file instanceof File) || !file.name) {
+      return fail(400, '附件不能为空')
     }
-    const attachment = uploadTicketAttachment(String(params.id), payload)
+    const attachment = uploadTicketAttachment(String(params.id), file.name, file.size)
     if (!attachment) {
       return fail(404, '工单不存在')
     }
     return ok(attachment, '附件上传成功')
+  }),
+
+  http.get('/api/tickets/:id/attachments/:attachmentId/download', async ({ request }) => {
+    if (shouldPassthroughTicketBackend) {
+      return passthrough()
+    }
+    if (!getSession(request)) {
+      return fail(401, 'token 无效')
+    }
+    return new HttpResponse(new Blob(['Mock 附件内容'], { type: 'application/octet-stream' }), {
+      headers: { 'Content-Type': 'application/octet-stream' },
+    })
   }),
 
   http.get('/api/assets', async ({ request }) => {
@@ -647,8 +661,41 @@ export const handlers = [
     return ok(document,'文件已上传，正在解析')
   }),
 
+  http.post('/api/kb/uploads/init', async ({ request }) => {
+    if (shouldPassthroughTicketBackend) return passthrough()
+    const session=getSession(request); if(!session)return fail(401,'token 无效')
+    const body=(await request.json()) as {fileName:string;fileSize:number;contentHash:string;chunkSize?:number}
+    const ready=mockDocuments.find(item=>item.contentHash===body.contentHash&&item.status==='READY')
+    if(ready)return ok({instant:true,documentId:ready.id,uploaded:[]})
+    const hit=[...mockUploadSessions.entries()].find(([,item])=>item.contentHash===body.contentHash)
+    const sessionId=hit?hit[0]:`mock-up-${Date.now()}`
+    if(!hit)mockUploadSessions.set(sessionId,{fileName:body.fileName,fileSize:body.fileSize,contentHash:body.contentHash,chunks:new Set()})
+    return ok({instant:false,sessionId,uploaded:[...mockUploadSessions.get(sessionId)!.chunks].sort((a,b)=>a-b)})
+  }),
+
+  http.post('/api/kb/uploads/:sessionId/chunks', async ({ request,params }) => {
+    if (shouldPassthroughTicketBackend) return passthrough()
+    if(!getSession(request))return fail(401,'token 无效')
+    const record=mockUploadSessions.get(String(params.sessionId));if(!record)return fail(404,'上传会话不存在或已过期')
+    const form=await request.formData();if(!form.get('file'))return fail(400,'分片内容不能为空')
+    record.chunks.add(Number(new URL(request.url).searchParams.get('index')||0))
+    return ok(null,'分片已接收')
+  }),
+
+  http.post('/api/kb/uploads/:sessionId/merge', async ({ request,params }) => {
+    if (shouldPassthroughTicketBackend) return passthrough()
+    const session=getSession(request); if(!session)return fail(401,'token 无效')
+    const sessionId=String(params.sessionId),record=mockUploadSessions.get(sessionId);if(!record)return fail(404,'上传会话不存在或已过期')
+    const id=`mock-doc-${Date.now()}`,ext=(record.fileName.split('.').pop()||'md') as KbDocumentDto['fileType'],now=new Date().toISOString()
+    const document:KbDocumentDto={id,title:record.fileName,fileName:record.fileName,fileType:ext,fileSize:record.fileSize,status:'PARSING',chunkCount:0,contentHash:record.contentHash,createdBy:session.username,createdAt:now,updatedAt:now};mockDocuments.unshift(document)
+    window.setTimeout(()=>{document.status='READY';document.chunkCount=1;document.updatedAt=new Date().toISOString();mockChunks[id]=[{id:`${id}-chunk`,documentId:id,chunkIndex:0,content:`${record.fileName} 的 Mock 解析内容`,vectorId:`${id}-vector`}]},800)
+    mockUploadSessions.delete(sessionId)
+    return ok(document,'文件已上传，正在解析')
+  }),
+
   http.get('/api/kb/documents/:id/chunks', async ({ request,params }) => { if(shouldPassthroughTicketBackend)return passthrough();if(!getSession(request))return fail(401,'token 无效');return ok(mockChunks[String(params.id)]||[]) }),
   http.put('/api/kb/documents/:id', async ({ request,params }) => { if(shouldPassthroughTicketBackend)return passthrough();if(!getSession(request))return fail(401,'token 无效');const item=mockDocuments.find(value=>value.id===String(params.id));if(!item)return fail(404,'文档不存在');item.title=String(((await request.json()) as {title:string}).title);item.updatedAt=new Date().toISOString();return ok(null,'标题已更新') }),
+  http.post('/api/kb/documents/:id/retry', async ({ request,params }) => { if(shouldPassthroughTicketBackend)return passthrough();if(!getSession(request))return fail(401,'token 无效');const item=mockDocuments.find(value=>value.id===String(params.id));if(!item)return fail(404,'文档不存在');if(item.status!=='FAILED')return fail(409,'仅解析失败的文档可以重试');item.status='PARSING';item.errorMsg=undefined;item.updatedAt=new Date().toISOString();window.setTimeout(()=>{item.status='READY';item.chunkCount=1;item.updatedAt=new Date().toISOString();mockChunks[item.id]=[{id:`${item.id}-chunk`,documentId:item.id,chunkIndex:0,content:`${item.fileName} 的 Mock 解析内容`,vectorId:`${item.id}-vector`}]},800);return ok(item,'已重新提交解析') }),
   http.delete('/api/kb/documents/:id', async ({ request,params }) => { if(shouldPassthroughTicketBackend)return passthrough();if(!getSession(request))return fail(401,'token 无效');const index=mockDocuments.findIndex(value=>value.id===String(params.id));if(index<0)return fail(404,'文档不存在');mockDocuments.splice(index,1);delete mockChunks[String(params.id)];return ok(null,'文档已删除') }),
 
   http.get('/api/kb', async ({ request }) => {

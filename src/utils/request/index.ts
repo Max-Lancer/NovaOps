@@ -188,6 +188,11 @@ const onResponse = async (response: AxiosResponse<ApiResponse<unknown>>) => {
   const config = response.config as RequestConfig
   clearControllerByConfig(config)
 
+  // blob 响应（附件下载）不带 ApiResponse 包装，必须原样返回，不能按 code 解包
+  if (config.responseType === 'blob') {
+    return response.data as unknown
+  }
+
   const { code, message: msg, data } = response.data
   if (code === 0) {
     return data

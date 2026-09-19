@@ -60,6 +60,9 @@ services:
       QDRANT_BASE_URL: http://qdrant:6333
       QDRANT_COLLECTION: ${QDRANT_COLLECTION:-novaops_kb}
       NOVAOPS_KB_STORAGE: /app/data/kb
+      # 工单附件实体目录：与知识库分开挂卷，避免附件增长挤占知识库配额
+      NOVAOPS_TICKET_STORAGE: /app/data/attachments
+      NOVAOPS_TICKET_MAX_FILE_BYTES: ${NOVAOPS_TICKET_MAX_FILE_BYTES:-20971520}
       # 留空时使用占位值：服务可正常启动，知识库向量化与 RAG 问答不可用
       SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-local-not-configured}
       SILICONFLOW_BASE_URL: ${SILICONFLOW_BASE_URL:-https://api.siliconflow.cn}
@@ -78,6 +81,7 @@ services:
       - "127.0.0.1:${BACKEND_HOST_PORT:-8090}:8090"
     volumes:
       - novaops-kb-data:/app/data/kb
+      - novaops-attachment-data:/app/data/attachments
 
   frontend:
     build:
@@ -98,3 +102,4 @@ volumes:
   novaops-mysql-data:
   novaops-qdrant-data:
   novaops-kb-data:
+  novaops-attachment-data:

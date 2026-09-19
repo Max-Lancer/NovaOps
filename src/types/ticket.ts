@@ -89,8 +89,3 @@ export interface TicketActionDto {
 export interface CreateCommentDto {
   content: string
 }
-
-export interface UploadAttachmentDto {
-  filename: string
-  size: number
-}

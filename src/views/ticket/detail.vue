@@ -7,6 +7,7 @@ import { getAssetBatchApi } from '@/api/asset'
 import { getUserOptionsApi } from '@/api/auth'
 import {
   createTicketCommentApi,
+  fetchTicketAttachmentApi,
   getTicketCommentsApi,
   getTicketDetailApi,
   ticketActionApi,
@@ -14,7 +15,7 @@ import {
 } from '@/api/ticket'
 import type { AssetSimpleDto } from '@/types/asset'
 import type { UserOptionDto } from '@/types/auth'
-import type { TicketActionType, TicketCommentDto, TicketDetailDto, TicketStatus } from '@/types/ticket'
+import type { TicketActionType, TicketAttachmentDto, TicketCommentDto, TicketDetailDto, TicketStatus } from '@/types/ticket'
 
 defineOptions({
   name: 'TicketDetail',
@@ -154,16 +155,26 @@ const submitComment = async () => {
 const handleUpload = async (options: any) => {
   try {
     const file = options.file as File
-    await uploadTicketAttachmentApi(ticketId.value, {
-      filename: file.name,
-      size: file.size,
-    })
+    await uploadTicketAttachmentApi(ticketId.value, file)
     options.onSuccess?.({}, file)
     message.success('附件上传成功')
     await loadTicket()
   } catch (error) {
     options.onError?.(error)
   }
+}
+
+// 下载要带 Authorization 头，直接给 href 会 401；因此取回 blob 后用临时链接落盘
+const downloadAttachment = async (item: TicketAttachmentDto) => {
+  const blob = await fetchTicketAttachmentApi(ticketId.value, item.id)
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = item.name
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }
 
 watch(
@@ -364,7 +375,7 @@ onMounted(() => {
           <a-list :data-source="detail?.attachments || []" size="small" class="mt12">
             <template #renderItem="{ item }">
               <a-list-item>
-                <a :href="item.url" target="_blank">{{ item.name }}</a>
+                <a @click="downloadAttachment(item as TicketAttachmentDto)">{{ item.name }}</a>
                 <span>{{ (item.size / 1024).toFixed(1) }} KB</span>
               </a-list-item>
             </template>

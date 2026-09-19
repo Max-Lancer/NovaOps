@@ -6,6 +6,7 @@ import com.novaops.backend.common.exception.BusinessException;
 import com.novaops.backend.common.security.CurrentSession;
 import com.novaops.backend.common.util.DateTimeUtils;
 import com.novaops.backend.common.util.IdGenerator;
+import com.novaops.backend.ticket.dto.AttachmentDownload;
 import com.novaops.backend.ticket.dto.CreateCommentRequest;
 import com.novaops.backend.ticket.dto.CreateTicketRequest;
 import com.novaops.backend.ticket.dto.TicketActionRequest;
@@ -16,32 +17,37 @@ import com.novaops.backend.ticket.dto.TicketListItemResponse;
 import com.novaops.backend.ticket.dto.TicketListQuery;
 import com.novaops.backend.ticket.dto.TicketTimelineItemResponse;
 import com.novaops.backend.ticket.dto.UpdateTicketRequest;
-import com.novaops.backend.ticket.dto.UploadAttachmentRequest;
 import com.novaops.backend.ticket.mapper.TicketMapper;
 import com.novaops.backend.ticket.model.TicketAssetRelationRecord;
 import com.novaops.backend.ticket.model.TicketAttachmentRecord;
 import com.novaops.backend.ticket.model.TicketCommentRecord;
 import com.novaops.backend.ticket.model.TicketRecord;
 import com.novaops.backend.ticket.model.TicketTimelineRecord;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class TicketService {
 
   private final TicketMapper ticketMapper;
   private final AuthService authService;
+  private final TicketAttachmentStorage attachmentStorage;
 
-  public TicketService(TicketMapper ticketMapper, AuthService authService) {
+  public TicketService(TicketMapper ticketMapper, AuthService authService, TicketAttachmentStorage attachmentStorage) {
     this.ticketMapper = ticketMapper;
     this.authService = authService;
+    this.attachmentStorage = attachmentStorage;
   }
 
   public PageResult<TicketListItemResponse> list(CurrentSession session, TicketListQuery query) {
@@ -265,22 +271,44 @@ public class TicketService {
   }
 
   @Transactional
-  public TicketAttachmentResponse uploadAttachment(CurrentSession session, String ticketId, UploadAttachmentRequest request) {
+  public TicketAttachmentResponse uploadAttachment(CurrentSession session, String ticketId, MultipartFile file) {
     TicketRecord record = requireTicket(ticketId);
     LocalDateTime now = LocalDateTime.now();
+    String attachmentId = IdGenerator.randomId("att");
+    TicketAttachmentStorage.StoredAttachment stored = attachmentStorage.save(ticketId, attachmentId, file);
 
     TicketAttachmentRecord attachment = new TicketAttachmentRecord();
-    attachment.setId(IdGenerator.randomId("att"));
+    attachment.setId(attachmentId);
     attachment.setTicketId(ticketId);
-    attachment.setName(request.getFilename());
-    attachment.setSize(request.getSize() == null ? 0L : request.getSize());
-    attachment.setUrl("/mock-attachments/" + ticketId + "/" + request.getFilename().replace(" ", "%20"));
+    attachment.setName(stored.fileName());
+    attachment.setSize(stored.size());
+    attachment.setUrl("/api/tickets/" + ticketId + "/attachments/" + attachmentId + "/download");
     attachment.setCreatedAt(now);
-    ticketMapper.insertAttachment(attachment);
 
-    record.setUpdatedAt(now);
-    ticketMapper.updateTicket(record);
+    try {
+      ticketMapper.insertAttachment(attachment);
+      record.setUpdatedAt(now);
+      ticketMapper.updateTicket(record);
+    } catch (RuntimeException ex) {
+      // 元数据没落库就不留文件实体，避免磁盘上多出永远访问不到的孤儿附件
+      attachmentStorage.delete(stored.path());
+      throw ex;
+    }
     return toAttachment(attachment);
+  }
+
+  /** 下载前校验工单与附件归属，并确认文件实体仍在磁盘上。 */
+  public AttachmentDownload loadAttachment(CurrentSession session, String ticketId, String attachmentId) {
+    requireTicket(ticketId);
+    TicketAttachmentRecord attachment = ticketMapper.findAttachment(ticketId, attachmentId);
+    if (attachment == null) {
+      throw new BusinessException(404, "附件不存在");
+    }
+    Path path = attachmentStorage.resolve(ticketId, attachmentId);
+    if (!Files.exists(path)) {
+      throw new BusinessException(404, "附件文件已丢失");
+    }
+    return new AttachmentDownload(attachment.getName(), attachment.getSize() == null ? 0L : attachment.getSize(), new FileSystemResource(path));
   }
 
   private TicketRecord requireTicket(String ticketId) {

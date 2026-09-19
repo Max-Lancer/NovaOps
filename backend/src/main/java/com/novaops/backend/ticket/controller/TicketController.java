@@ -4,6 +4,7 @@ import com.novaops.backend.common.api.ApiResponse;
 import com.novaops.backend.common.api.PageResult;
 import com.novaops.backend.common.security.RequestContext;
 import com.novaops.backend.common.security.RequirePermission;
+import com.novaops.backend.ticket.dto.AttachmentDownload;
 import com.novaops.backend.ticket.dto.CreateCommentRequest;
 import com.novaops.backend.ticket.dto.CreateTicketRequest;
 import com.novaops.backend.ticket.dto.TicketActionRequest;
@@ -13,10 +14,15 @@ import com.novaops.backend.ticket.dto.TicketDetailResponse;
 import com.novaops.backend.ticket.dto.TicketListItemResponse;
 import com.novaops.backend.ticket.dto.TicketListQuery;
 import com.novaops.backend.ticket.dto.UpdateTicketRequest;
-import com.novaops.backend.ticket.dto.UploadAttachmentRequest;
 import com.novaops.backend.ticket.service.TicketService;
 import jakarta.validation.Valid;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -24,7 +30,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/tickets")
@@ -82,8 +90,23 @@ public class TicketController {
   @RequirePermission("ticket:comment")
   public ApiResponse<TicketAttachmentResponse> uploadAttachment(
       @PathVariable("id") String id,
-      @Valid @RequestBody UploadAttachmentRequest request
+      @RequestPart("file") MultipartFile file
   ) {
-    return ApiResponse.success(ticketService.uploadAttachment(RequestContext.getRequired(), id, request), "附件上传成功");
+    return ApiResponse.success(ticketService.uploadAttachment(RequestContext.getRequired(), id, file), "附件上传成功");
+  }
+
+  /** 附件实体不走 JSON 包装，直接回文件流；下载要带 Authorization 头，前端按 blob 取回再落盘。 */
+  @GetMapping("/{id}/attachments/{attachmentId}/download")
+  @RequirePermission("ticket:view")
+  public ResponseEntity<Resource> downloadAttachment(@PathVariable("id") String id, @PathVariable("attachmentId") String attachmentId) {
+    AttachmentDownload download = ticketService.loadAttachment(RequestContext.getRequired(), id, attachmentId);
+    ContentDisposition disposition = ContentDisposition.attachment()
+        .filename(download.getFileName(), StandardCharsets.UTF_8)
+        .build();
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+        .contentType(MediaType.APPLICATION_OCTET_STREAM)
+        .contentLength(download.getSize())
+        .body(download.getResource());
   }
 }

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.novaops.backend.kb.mapper.KbUploadMapper">
+  <insert id="insertSession">insert into kb_upload_session(id,content_hash,file_name,file_type,file_size,chunk_size,chunk_count,status,document_id,created_by,created_at,updated_at,deleted) values(#{id},#{contentHash},#{fileName},#{fileType},#{fileSize},#{chunkSize},#{chunkCount},#{status},#{documentId},#{createdBy},now(),now(),0)</insert>
+  <select id="findSession" resultType="com.novaops.backend.kb.model.KbUploadSessionRecord">select * from kb_upload_session where id=#{id} and deleted=0 limit 1</select>
+  <select id="findSessionByHash" resultType="com.novaops.backend.kb.model.KbUploadSessionRecord">select * from kb_upload_session where content_hash=#{contentHash} and deleted=0 order by created_at desc limit 1</select>
+  <update id="resetSession">update kb_upload_session set chunk_size=#{chunkSize},chunk_count=#{chunkCount},status='UPLOADING',document_id=null,updated_at=now() where id=#{id}</update>
+  <update id="updateSessionStatus">update kb_upload_session set status=#{status},document_id=#{documentId},updated_at=now() where id=#{id}</update>
+  <insert id="markChunkUploaded">insert ignore into kb_upload_chunk(session_id,chunk_index,size,created_at) values(#{sessionId},#{chunkIndex},#{size},now())</insert>
+  <select id="listUploadedIndexes" resultType="int">select chunk_index from kb_upload_chunk where session_id=#{sessionId} order by chunk_index</select>
+  <select id="countUploaded" resultType="int">select count(1) from kb_upload_chunk where session_id=#{sessionId}</select>
+  <delete id="deleteUploadedChunks">delete from kb_upload_chunk where session_id=#{sessionId}</delete>
+</mapper>
