@@ -10,7 +10,6 @@ import type {
   TicketListItemDto,
   TicketListQueryDto,
   UpdateTicketDto,
-  UploadAttachmentDto,
 } from '@/types/ticket'
 
 export const getTicketListApi = (params: TicketListQueryDto) => {
@@ -41,6 +40,13 @@ export const createTicketCommentApi = (id: string, payload: CreateCommentDto) =>
   return request.post<TicketCommentDto, CreateCommentDto>(`/tickets/${id}/comments`, payload)
 }
 
-export const uploadTicketAttachmentApi = (id: string, payload: UploadAttachmentDto) => {
-  return request.post<TicketAttachmentDto, UploadAttachmentDto>(`/tickets/${id}/attachments`, payload)
+export const uploadTicketAttachmentApi = (id: string, file: File) => {
+  const data = new FormData()
+  data.append('file', file, file.name)
+  return request.post<TicketAttachmentDto, FormData>(`/tickets/${id}/attachments`, data, { timeout: 60000 })
+}
+
+/** 附件实体是文件流而不是 JSON，取回 Blob 后由调用方触发浏览器下载。 */
+export const fetchTicketAttachmentApi = (id: string, attachmentId: string) => {
+  return request.get<Blob>(`/tickets/${id}/attachments/${attachmentId}/download`, { responseType: 'blob' })
 }

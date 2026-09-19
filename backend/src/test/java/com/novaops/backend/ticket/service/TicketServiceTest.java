@@ -33,7 +33,7 @@ class TicketServiceTest {
   void setUp() {
     ticketMapper = mock(TicketMapper.class);
     authService = mock(AuthService.class);
-    ticketService = new TicketService(ticketMapper, authService);
+    ticketService = new TicketService(ticketMapper, authService, mock(TicketAttachmentStorage.class));
   }
 
   private TicketRecord recordOf(String status) {

@@ -70,6 +70,9 @@ app:
     qdrant-base-url: ${QDRANT_BASE_URL:http://localhost:6333}
     qdrant-collection: ${QDRANT_COLLECTION:novaops_kb}
     qdrant-api-key: ${QDRANT_API_KEY:}
+  ticket:
+    attachment-storage-path: ${NOVAOPS_TICKET_STORAGE:./data/attachments}
+    max-attachment-size-bytes: ${NOVAOPS_TICKET_MAX_FILE_BYTES:20971520}
   agent:
     plan-enabled: ${NOVAOPS_AGENT_PLAN_ENABLED:true}
     sse-timeout-ms: ${NOVAOPS_AGENT_SSE_TIMEOUT_MS:120000}

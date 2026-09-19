@@ -1,5 +1,7 @@
 SET NAMES utf8mb4;
 drop table if exists biz_ticket_attachment;
+drop table if exists kb_upload_chunk;
+drop table if exists kb_upload_session;
 drop table if exists kb_chunk;
 drop table if exists kb_document;
 drop table if exists agent_audit_log;
@@ -100,12 +102,14 @@ create table kb_document (
   status varchar(32) not null,
   chunk_count int not null default 0,
   error_msg varchar(1000) null,
+  content_hash varchar(64) null,
   created_by varchar(64) not null,
   created_at datetime not null default current_timestamp,
   updated_at datetime not null default current_timestamp,
   deleted tinyint not null default 0,
   index idx_kb_document_status (status),
-  index idx_kb_document_updated (updated_at desc)
+  index idx_kb_document_updated (updated_at desc),
+  index idx_kb_document_hash (content_hash)
 );
 
 create table kb_chunk (
@@ -115,6 +119,32 @@ create table kb_chunk (
   content mediumtext not null,
   vector_id varchar(64) not null,
   index idx_kb_chunk_document (document_id, chunk_index)
+);
+
+create table kb_upload_session (
+  id varchar(64) primary key,
+  content_hash varchar(64) not null,
+  file_name varchar(255) not null,
+  file_type varchar(16) not null,
+  file_size bigint not null,
+  chunk_size int not null,
+  chunk_count int not null,
+  status varchar(32) not null,
+  document_id varchar(64) null,
+  created_by varchar(64) not null,
+  created_at datetime not null default current_timestamp,
+  updated_at datetime not null default current_timestamp,
+  deleted tinyint not null default 0,
+  unique key uk_kb_upload_hash (content_hash),
+  index idx_kb_upload_status (status)
+);
+
+create table kb_upload_chunk (
+  session_id varchar(64) not null,
+  chunk_index int not null,
+  size int not null,
+  created_at datetime not null default current_timestamp,
+  primary key (session_id, chunk_index)
 );
 
 create table agent_conversation (

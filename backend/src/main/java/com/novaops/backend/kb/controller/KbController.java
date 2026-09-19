@@ -33,5 +33,6 @@ public class KbController {
   @GetMapping("/{id}/chunks") public ApiResponse<List<KbChunkRecord>> chunks(@PathVariable String id){return ApiResponse.success(service.chunks(RequestContext.getRequired(),id));}
   @PutMapping("/{id}") public ApiResponse<Void> title(@PathVariable String id,@Valid @RequestBody UpdateDocumentTitleRequest request){service.updateTitle(RequestContext.getRequired(),id,request.getTitle());return ApiResponse.success(null,"标题已更新");}
   @PostMapping("/{id}/replace") public ApiResponse<KbDocumentRecord> replace(@PathVariable String id,@RequestParam(required=false) String title,@RequestPart("file") MultipartFile file){return ApiResponse.success(service.replace(RequestContext.getRequired(),id,title,file),"文件已替换，正在解析");}
+  @PostMapping("/{id}/retry") public ApiResponse<KbDocumentRecord> retry(@PathVariable String id){return ApiResponse.success(service.retry(RequestContext.getRequired(),id),"已重新提交解析");}
   @DeleteMapping("/{id}") public ApiResponse<Void> delete(@PathVariable String id){service.delete(RequestContext.getRequired(),id);return ApiResponse.success(null,"文档已删除");}
 }

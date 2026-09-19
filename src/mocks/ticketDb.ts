@@ -14,7 +14,6 @@ import type {
   TicketStatus,
   TicketTimelineItemDto,
   UpdateTicketDto,
-  UploadAttachmentDto,
 } from '@/types/ticket'
 import type { RelatedTicketDto } from '@/types/asset'
 import { getUser, listMockUsers } from './db'
@@ -440,17 +439,19 @@ export const createTicketComment = (
 
 export const uploadTicketAttachment = (
   ticketId: string,
-  payload: UploadAttachmentDto
+  name: string,
+  size: number
 ): TicketAttachmentDto | null => {
   const ticket = findTicket(ticketId)
   if (!ticket) {
     return null
   }
+  const attachmentId = uuid('att')
   const attachment: TicketAttachmentDto = {
-    id: uuid('att'),
-    name: payload.filename,
-    size: payload.size,
-    url: `/mock-attachments/${ticketId}/${encodeURIComponent(payload.filename)}`,
+    id: attachmentId,
+    name,
+    size,
+    url: `/api/tickets/${ticketId}/attachments/${attachmentId}/download`,
     createdAt: dayjs().toISOString(),
   }
   ticket.attachments.unshift(attachment)

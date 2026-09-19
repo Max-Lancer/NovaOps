@@ -53,5 +53,7 @@ public interface TicketMapper {
 
   List<TicketAttachmentRecord> listAttachments(@Param("ticketId") String ticketId);
 
+  TicketAttachmentRecord findAttachment(@Param("ticketId") String ticketId, @Param("attachmentId") String attachmentId);
+
   void insertAttachment(TicketAttachmentRecord record);
 }

@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.novaops.backend.kb.mapper.KbMapper">
-  <insert id="insertDocument">insert into kb_document(id,title,file_name,file_type,file_size,storage_path,status,chunk_count,error_msg,created_by,created_at,updated_at,deleted) values(#{id},#{title},#{fileName},#{fileType},#{fileSize},#{storagePath},#{status},0,null,#{createdBy},now(),now(),0)</insert>
+  <insert id="insertDocument">insert into kb_document(id,title,file_name,file_type,file_size,storage_path,status,chunk_count,error_msg,content_hash,created_by,created_at,updated_at,deleted) values(#{id},#{title},#{fileName},#{fileType},#{fileSize},#{storagePath},#{status},0,null,#{contentHash},#{createdBy},now(),now(),0)</insert>
   <select id="findDocument" resultType="com.novaops.backend.kb.model.KbDocumentRecord">select * from kb_document where id=#{id} and deleted=0 limit 1</select>
+  <select id="findReadyDocumentByHash" resultType="com.novaops.backend.kb.model.KbDocumentRecord">select * from kb_document where content_hash=#{contentHash} and status='READY' and deleted=0 order by created_at desc limit 1</select>
+  <select id="findDocumentByHash" resultType="com.novaops.backend.kb.model.KbDocumentRecord">select * from kb_document where content_hash=#{contentHash} and deleted=0 order by created_at desc limit 1</select>
   <select id="listDocuments" resultType="com.novaops.backend.kb.model.KbDocumentRecord">select * from kb_document where deleted=0 <if test="keyword != null and keyword != ''">and (title like concat('%',#{keyword},'%') or file_name like concat('%',#{keyword},'%'))</if><if test="fileType != null and fileType != ''">and file_type=#{fileType}</if><if test="status != null and status != ''">and status=#{status}</if> order by updated_at desc limit #{offset},#{pageSize}</select>
   <select id="countDocuments" resultType="long">select count(1) from kb_document where deleted=0 <if test="keyword != null and keyword != ''">and (title like concat('%',#{keyword},'%') or file_name like concat('%',#{keyword},'%'))</if><if test="fileType != null and fileType != ''">and file_type=#{fileType}</if><if test="status != null and status != ''">and status=#{status}</if></select>
   <update id="updateStatus">update kb_document set status=#{status},chunk_count=#{chunkCount},error_msg=#{errorMsg},updated_at=now() where id=#{id}</update>
   <update id="updateTitle">update kb_document set title=#{title},updated_at=now() where id=#{id} and deleted=0</update>
+  <update id="updateFileMeta">update kb_document set file_name=#{fileName},file_type=#{fileType},file_size=#{fileSize},storage_path=#{storagePath},content_hash=#{contentHash},updated_at=now() where id=#{id} and deleted=0</update>
   <insert id="insertChunks">
     insert into kb_chunk(id,document_id,chunk_index,content,vector_id) values
     <foreach collection="records" item="record" separator=",">(#{record.id},#{record.documentId},#{record.chunkIndex},#{record.content},#{record.vectorId})</foreach>
