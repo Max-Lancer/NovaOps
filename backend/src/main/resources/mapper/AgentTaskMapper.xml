@@ -11,5 +11,5 @@
   <select id="listSteps" resultType="com.novaops.backend.agent.task.model.AgentTaskStepRecord">select * from agent_task_step where task_id=#{taskId} order by seq,id</select>
   <select id="findStaleTaskIds" resultType="string">select id from agent_task where status in ('RUNNING','AWAITING_CONFIRM') and updated_at &lt; #{cutoff} order by updated_at limit 200</select>
   <select id="countTasksByStatus" resultType="java.util.HashMap">select status as "status", count(*) as "cnt" from agent_task where user_id=#{userId} group by status</select>
-  <select id="avgToolStepsPerTask" resultType="java.lang.Double">select coalesce(avg(step_cnt), 0) from (select count(*) as step_cnt from agent_task_step s join agent_task t on s.task_id = t.id where t.user_id = #{userId} and s.kind = 'tool' group by s.task_id)</select>
+  <select id="avgToolStepsPerTask" resultType="java.lang.Double">select coalesce(avg(step_cnt), 0) from (select count(*) as step_cnt from agent_task_step s join agent_task t on s.task_id = t.id where t.user_id = #{userId} and s.kind = 'tool' group by s.task_id) tool_step_counts</select>
 </mapper>
