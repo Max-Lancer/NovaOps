@@ -9,6 +9,7 @@ import com.novaops.backend.ops.dashboard.model.TicketOverviewRow;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -18,7 +19,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class OpsDashboardService {
 
-  private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("MM-dd");
+  private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+  private static final long MAX_RANGE_DAYS = 366;
   private static final List<String> STATUSES = List.of("pending", "claiming", "processing", "review", "done");
   private static final Map<String, String> STATUS_LABELS = Map.of(
       "pending", "待处理",
@@ -49,6 +51,9 @@ public class OpsDashboardService {
     }
     if (end.isBefore(start)) {
       throw new BusinessException(400, "结束日期不能早于开始日期");
+    }
+    if (ChronoUnit.DAYS.between(start.toLocalDate(), end.toLocalDate()) > MAX_RANGE_DAYS) {
+      throw new BusinessException(400, "统计区间不能超过 366 天");
     }
 
     TicketOverviewRow overview = dashboardMapper.summarize(start, end);

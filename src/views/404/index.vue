@@ -7,7 +7,7 @@
     >
       <template #extra>
         <RouterLink to="/home">
-          <a-button type="primary">返回 Dashboard</a-button>
+          <a-button type="primary">返回工作台</a-button>
         </RouterLink>
       </template>
     </a-result>

@@ -1,10 +1,12 @@
 package com.novaops.backend.ops.dashboard.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.novaops.backend.common.exception.BusinessException;
 import com.novaops.backend.ops.dashboard.dto.DashboardMetricsResponse;
 import com.novaops.backend.ops.dashboard.mapper.OpsDashboardMapper;
 import com.novaops.backend.ops.dashboard.model.NamedCount;
@@ -37,7 +39,7 @@ class OpsDashboardServiceTest {
     assertThat(metrics.overview().ticketTotal()).isZero();
     assertThat(metrics.overview().doneRate()).isZero();
     assertThat(metrics.categories()).extracting(DashboardMetricsResponse.Category::name).contains("接单待审");
-    assertThat(metrics.trend().dates()).containsExactly("04-20");
+    assertThat(metrics.trend().dates()).containsExactly("2026-04-20");
     assertThat(metrics.trend().created()).containsExactly(0L);
   }
 
@@ -50,7 +52,7 @@ class OpsDashboardServiceTest {
     row.setAvgDoneHours(1.26);
     when(dashboardMapper.summarize(any(), any())).thenReturn(row);
     NamedCount created = new NamedCount();
-    created.setName("04-20");
+    created.setName("2026-04-20");
     created.setValue(3);
     NamedCount claiming = new NamedCount();
     claiming.setName("claiming");
@@ -63,11 +65,18 @@ class OpsDashboardServiceTest {
     assertThat(metrics.overview().doneRate()).isEqualTo(25.0);
     assertThat(metrics.overview().urgentRate()).isEqualTo(50.0);
     assertThat(metrics.overview().avgHandleHours()).isEqualTo(1.3);
-    assertThat(metrics.trend().dates()).containsExactly("04-20", "04-21");
+    assertThat(metrics.trend().dates()).containsExactly("2026-04-20", "2026-04-21");
     assertThat(metrics.trend().created()).containsExactly(3L, 0L);
     assertThat(metrics.categories())
         .filteredOn(item -> "接单待审".equals(item.name()))
         .extracting(DashboardMetricsResponse.Category::value)
         .containsExactly(1L);
+  }
+
+  @Test
+  void rangeLongerThan366DaysIsRejected() {
+    assertThatThrownBy(() -> dashboardService.metrics("2025-01-01T00:00:00", "2026-01-03T00:00:00"))
+        .isInstanceOf(BusinessException.class)
+        .hasMessageContaining("366");
   }
 }

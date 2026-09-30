@@ -94,7 +94,10 @@ const createTrendOption = (data: DashboardMetricsDto): ECOption => ({
     data: data.trend.dates,
     boundaryGap: false,
     axisLine: { lineStyle: { color: chartColors().border } },
-    axisLabel: { color: chartColors().secondary },
+    axisLabel: {
+      color: chartColors().secondary,
+      formatter: (value: string) => (value.length > 5 ? value.slice(5) : value),
+    },
   },
   yAxis: {
     type: 'value',
