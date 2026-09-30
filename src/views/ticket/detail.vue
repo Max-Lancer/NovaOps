@@ -46,6 +46,7 @@ const assigneeOptions = computed(() =>
 
 const statusTextMap: Record<TicketStatus, string> = {
   pending: '待处理',
+  claiming: '接单待审',
   processing: '处理中',
   review: '待复核',
   done: '已完成',
@@ -55,6 +56,7 @@ const flowSteps: TicketStatus[] = ['pending', 'processing', 'review', 'done']
 
 const allowedActionsByStatus: Record<TicketStatus, readonly TicketActionType[]> = {
   pending: ['assign'],
+  claiming: ['approve_claim', 'reject_claim'],
   processing: ['transfer', 'advance', 'close'],
   review: ['transfer', 'approve', 'reject', 'close'],
   done: [],
@@ -215,6 +217,28 @@ onMounted(() => {
               指派
             </a-button>
           </Permission>
+          <Permission code="ticket:claim:approve">
+            <a-button
+              v-if="isActionAvailable('approve_claim')"
+              size="small"
+              type="primary"
+              :loading="actionLoading"
+              @click="doAction('approve_claim')"
+            >
+              通过接单
+            </a-button>
+          </Permission>
+          <Permission code="ticket:claim:approve">
+            <a-button
+              v-if="isActionAvailable('reject_claim')"
+              size="small"
+              danger
+              :loading="actionLoading"
+              @click="doAction('reject_claim')"
+            >
+              驳回接单
+            </a-button>
+          </Permission>
           <Permission code="ticket:transfer">
             <a-button
               v-if="isActionAvailable('transfer')"
@@ -284,6 +308,7 @@ onMounted(() => {
         </a-descriptions-item>
         <a-descriptions-item label="优先级">{{ detail?.priority }}</a-descriptions-item>
         <a-descriptions-item label="负责人">{{ detail?.assigneeName || '-' }}</a-descriptions-item>
+        <a-descriptions-item v-if="detail?.status === 'claiming'" label="接单申请人">{{ detail?.claimantName || '-' }}</a-descriptions-item>
         <a-descriptions-item label="创建人">{{ detail?.creatorName }}</a-descriptions-item>
         <a-descriptions-item label="更新时间">
           {{ detail?.updatedAt ? dayjs(detail.updatedAt).format('YYYY-MM-DD HH:mm:ss') : '-' }}
@@ -295,7 +320,7 @@ onMounted(() => {
               :key="asset.id"
               color="blue"
               class="asset-tag"
-              @click="router.push(`/asset/detail/${asset.id}`)"
+              @click="router.push(`/ops/asset/detail/${asset.id}`)"
             >
               {{ asset.id }} / {{ asset.name }}
             </a-tag>

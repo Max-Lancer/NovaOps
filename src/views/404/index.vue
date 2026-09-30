@@ -6,7 +6,7 @@
       sub-title="页面不存在。"
     >
       <template #extra>
-        <RouterLink to="/dashboard">
+        <RouterLink to="/home">
           <a-button type="primary">返回 Dashboard</a-button>
         </RouterLink>
       </template>

@@ -7,6 +7,7 @@ import {
   BookOutlined,
   CustomerServiceOutlined,
   DashboardOutlined,
+  HomeOutlined,
   DesktopOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -34,6 +35,7 @@ const openKeys = ref<string[]>([])
 
 // 图标映射：后端返回的 icon 字符串 → 对应的图标组件
 const iconMap = {
+  home: HomeOutlined,
   dashboard: DashboardOutlined,
   ticket: ToolOutlined,
   asset: DesktopOutlined,
@@ -83,11 +85,11 @@ const menuItems = computed(() => renderMenuItems(permissionStore.menus))
 
 // 详情页/编辑页在菜单中高亮其对应的列表页（详情页本身不在菜单里）
 const selectedMenuPath = computed(() => {
-  if (route.path.startsWith('/ticket/detail')) {
-    return '/ticket/list'
+  if (route.path.startsWith('/ops/ticket/detail')) {
+    return '/ops/ticket/list'
   }
-  if (route.path.startsWith('/asset/detail')) {
-    return '/asset/list'
+  if (route.path.startsWith('/ops/asset/detail')) {
+    return '/ops/asset/list'
   }
   return route.path
 })

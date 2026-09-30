@@ -219,6 +219,7 @@ create table biz_ticket (
   status varchar(32) not null,
   priority varchar(32) not null,
   assignee_id varchar(64) null,
+  claimant_id varchar(64) null,
   creator_id varchar(64) not null,
   due_date datetime null,
   created_at datetime not null,
@@ -229,6 +230,7 @@ create table biz_ticket (
   index idx_ticket_assignee (assignee_id),
   index idx_ticket_creator (creator_id),
   constraint fk_ticket_assignee foreign key (assignee_id) references sys_user (id),
+  constraint fk_ticket_claimant foreign key (claimant_id) references sys_user (id),
   constraint fk_ticket_creator foreign key (creator_id) references sys_user (id)
 );
 
@@ -312,9 +314,9 @@ insert into sys_user (id, username, email, password_hash, display_name, role_id,
 
 insert into sys_role (id, code, name, description, sort_order) values
   ('role-admin', 'admin', '管理员', '管理用户、身份、知识库以及全部业务数据', 10),
-  ('role-staff', 'staff', '运维人员', '处理工单、资产与使用智能问答', 20),
-  ('role-guest', 'guest', '访客', '只读访问授权看板与智能问答', 30),
-  ('role-member', 'member', '普通成员', '注册用户默认身份：只读看板、提交工单与智能问答', 40);
+  ('role-staff', 'staff', '运维专员', '处理工单、资产、审批接单并使用智能问答', 20),
+  ('role-guest', 'guest', '访客', '使用工作台中的智能问答', 30),
+  ('role-member', 'member', '员工', '提问、报故障并发起接单申请', 40);
 
 insert into sys_permission (id, code, name) values
   ('perm-dashboard-view', 'dashboard:view', '查看看板'),
@@ -337,7 +339,9 @@ insert into sys_permission (id, code, name) values
   ('perm-kb-edit', 'kb:edit', '编辑知识库'),
   ('perm-auth-user-manage', 'auth:user:manage', '管理用户与身份'),
   ('perm-agent-chat', 'agent:chat', '使用智能问答'),
-  ('perm-agent-task', 'agent:task', '运行智能体任务');
+  ('perm-agent-task', 'agent:task', '运行智能体任务'),
+  ('perm-ticket-claim', 'ticket:claim', '申请接单'),
+  ('perm-ticket-claim-approve', 'ticket:claim:approve', '审批接单');
 
 insert into sys_role_permission (role_id, permission_id) values
   -- admin：全部权限
@@ -362,7 +366,9 @@ insert into sys_role_permission (role_id, permission_id) values
   ('role-admin', 'perm-asset-scrap'),
   ('role-admin', 'perm-kb-view'),
   ('role-admin', 'perm-kb-edit'),
-  -- staff：运维人员
+  ('role-admin', 'perm-ticket-claim'),
+  ('role-admin', 'perm-ticket-claim-approve'),
+  -- staff：运维专员
   ('role-staff', 'perm-agent-chat'),
   ('role-staff', 'perm-agent-task'),
   ('role-staff', 'perm-dashboard-view'),
@@ -374,31 +380,35 @@ insert into sys_role_permission (role_id, permission_id) values
   ('role-staff', 'perm-ticket-comment'),
   ('role-staff', 'perm-asset-view'),
   ('role-staff', 'perm-asset-claim'),
+  ('role-staff', 'perm-ticket-claim-approve'),
   -- guest：访客
-  ('role-guest', 'perm-dashboard-view'),
   ('role-guest', 'perm-agent-chat'),
-  -- member：普通成员（注册默认）
-  ('role-member', 'perm-dashboard-view'),
+  -- member：员工（注册默认）
   ('role-member', 'perm-ticket-create'),
+  ('role-member', 'perm-ticket-claim'),
   ('role-member', 'perm-agent-chat');
 
 insert into sys_menu (id, title, name, path, component, icon, permission_code, keep_alive, parent_id, sort_order, menu_scope) values
-  ('full-dashboard', 'Dashboard', 'Dashboard', '/dashboard', 'DashboardView', 'dashboard', 'dashboard:view', 1, null, 10, 'full'),
-  ('full-ticket', '工单', 'TicketRoot', '/ticket', 'RouteView', 'ticket', null, 1, null, 20, 'full'),
-  ('full-ticket-list', '工单列表', 'TicketList', '/ticket/list', 'TicketListView', null, 'ticket:view', 1, 'full-ticket', 21, 'full'),
-  ('full-asset', '资产', 'AssetRoot', '/asset', 'RouteView', 'asset', null, 1, null, 30, 'full'),
-  ('full-asset-list', '资产列表', 'AssetList', '/asset/list', 'AssetListView', null, 'asset:view', 1, 'full-asset', 31, 'full'),
+  ('full-home', '工作台', 'Home', '/home', 'HomeView', 'home', 'agent:chat', 1, null, 10, 'full'),
+  ('full-ops', '运维', 'OpsRoot', '/ops', 'RouteView', 'ticket', null, 1, null, 20, 'full'),
+  ('full-dashboard', '运维看板', 'Dashboard', '/ops/dashboard', 'DashboardView', 'dashboard', 'dashboard:view', 1, 'full-ops', 21, 'full'),
+  ('full-ticket-list', '工单列表', 'TicketList', '/ops/ticket/list', 'TicketListView', null, 'ticket:view', 1, 'full-ops', 22, 'full'),
+  ('full-asset-list', '资产列表', 'AssetList', '/ops/asset/list', 'AssetListView', null, 'asset:view', 1, 'full-ops', 23, 'full'),
   ('full-kb', '知识库', 'KbRoot', '/kb', 'RouteView', 'kb', null, 1, null, 40, 'full'),
   ('full-kb-list', '文章列表', 'KbList', '/kb/list', 'KbListView', null, 'kb:view', 1, 'full-kb', 41, 'full'),
   ('full-user', '用户与身份', 'UserManagement', '/system/users', 'UserManagementView', 'user', 'auth:user:manage', 1, null, 50, 'full'),
-  ('staff-dashboard', 'Dashboard', 'Dashboard', '/dashboard', 'DashboardView', 'dashboard', 'dashboard:view', 1, null, 10, 'staff'),
-  ('staff-ticket', '工单', 'TicketRoot', '/ticket', 'RouteView', 'ticket', null, 1, null, 20, 'staff'),
-  ('staff-ticket-list', '工单列表', 'TicketList', '/ticket/list', 'TicketListView', null, 'ticket:view', 1, 'staff-ticket', 21, 'staff'),
+  ('staff-home', '工作台', 'Home', '/home', 'HomeView', 'home', 'agent:chat', 1, null, 10, 'staff'),
+  ('staff-ops', '运维', 'OpsRoot', '/ops', 'RouteView', 'ticket', null, 1, null, 20, 'staff'),
+  ('staff-dashboard', '运维看板', 'Dashboard', '/ops/dashboard', 'DashboardView', 'dashboard', 'dashboard:view', 1, 'staff-ops', 21, 'staff'),
+  ('staff-ticket-list', '工单列表', 'TicketList', '/ops/ticket/list', 'TicketListView', null, 'ticket:view', 1, 'staff-ops', 22, 'staff'),
+  ('staff-asset-list', '资产列表', 'AssetList', '/ops/asset/list', 'AssetListView', null, 'asset:view', 1, 'staff-ops', 23, 'staff'),
   ('full-agent-console', '智能体工作台', 'AgentConsole', '/agent/console', 'AgentConsoleView', 'robot', 'agent:task', 1, null, 45, 'full'),
   ('staff-agent-console', '智能体工作台', 'AgentConsole', '/agent/console', 'AgentConsoleView', 'robot', 'agent:task', 1, null, 45, 'staff'),
   ('full-agent-tasks', '任务中心', 'AgentTasks', '/agent/tasks', 'AgentTasksView', 'robot', 'agent:task', 1, null, 46, 'full'),
   ('staff-agent-tasks', '任务中心', 'AgentTasks', '/agent/tasks', 'AgentTasksView', 'robot', 'agent:task', 1, null, 46, 'staff'),
-  ('guest-dashboard', 'Dashboard', 'Dashboard', '/dashboard', 'DashboardView', 'dashboard', 'dashboard:view', 1, null, 10, 'guest');
+  ('member-home', '工作台', 'Home', '/home', 'HomeView', 'home', 'agent:chat', 1, null, 10, 'member'),
+  ('member-claim', '待接工单', 'ClaimQueue', '/ops/ticket/claim', 'ClaimQueueView', 'ticket', 'ticket:claim', 1, null, 20, 'member'),
+  ('guest-home', '工作台', 'Home', '/home', 'HomeView', 'home', 'agent:chat', 1, null, 10, 'guest');
 
 insert into biz_ticket (id, title, description, status, priority, assignee_id, creator_id, due_date, created_at, updated_at) values
   ('A-TICKET-0001', 'TENANT-A 网络与终端巡检异常 #1', '巡检发现交换机端口丢包，需要排查链路质量。', 'pending', 'medium', 'u-tom', 'u-admin', '2026-04-25 18:00:00', '2026-04-20 09:00:00', '2026-04-20 11:00:00'),

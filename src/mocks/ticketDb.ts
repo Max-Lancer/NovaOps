@@ -16,6 +16,7 @@ import type {
   UpdateTicketDto,
 } from '@/types/ticket'
 import type { RelatedTicketDto } from '@/types/asset'
+import type { DashboardMetricsDto } from '@/types/dashboard'
 import { getUser, listMockUsers } from './db'
 
 const statusFlow: TicketStatus[] = ['pending', 'processing', 'review', 'done']
@@ -314,6 +315,9 @@ export const updateTicket = (
 
 const ILLEGAL_TRANSITION_MSG: Record<string, string> = {
   assign: '仅待处理的工单可指派',
+  claim: '仅待处理的工单可申请接单',
+  approve_claim: '仅接单待审的工单可通过',
+  reject_claim: '仅接单待审的工单可驳回',
   transfer: '仅处理中或待复核的工单可转派',
   advance: '仅处理中的工单可提交复核',
   approve: '仅待复核的工单可复核通过',
@@ -338,6 +342,11 @@ export const actionTicket = (
     switch (action) {
       case 'assign':
         return status === 'pending'
+      case 'claim':
+        return status === 'pending'
+      case 'approve_claim':
+      case 'reject_claim':
+        return status === 'claiming'
       case 'transfer':
         return status === 'processing' || status === 'review'
       case 'advance':
@@ -356,7 +365,28 @@ export const actionTicket = (
     throw new Error(ILLEGAL_TRANSITION_MSG[payload.action] || '非法状态流转')
   }
 
+  const operator = resolveUsername(username)
   switch (payload.action) {
+    case 'claim': {
+      ticket.status = 'claiming'
+      ticket.claimantId = operator.id
+      ticket.claimantName = operator.displayName
+      break
+    }
+    case 'approve_claim': {
+      if (operator.id === ticket.claimantId) {
+        throw new Error('申请人不能审批自己的接单申请')
+      }
+      ticket.assigneeId = ticket.claimantId
+      ticket.assigneeName = ticket.claimantName
+      ticket.status = 'processing'
+      break
+    }
+    case 'reject_claim':
+      ticket.claimantId = undefined
+      ticket.claimantName = undefined
+      ticket.status = 'pending'
+      break
     case 'assign':
     case 'transfer': {
       if (!payload.assigneeId) {
@@ -392,7 +422,6 @@ export const actionTicket = (
   }
 
   ticket.updatedAt = now
-  const operator = resolveUsername(username)
   ticket.timeline.unshift(
     createTimelineItem({
       action: payload.action,
@@ -457,6 +486,95 @@ export const uploadTicketAttachment = (
   ticket.attachments.unshift(attachment)
   ticket.updatedAt = dayjs().toISOString()
   return clone(attachment)
+}
+
+export const queryClaimQueue = (userId: string, page = 1, pageSize = 50): PageResult<TicketListItemDto> => {
+  seedTickets()
+  const filtered = tickets.filter(
+    (ticket) => ticket.status === 'pending' || (ticket.status === 'claiming' && ticket.claimantId === userId),
+  )
+  const start = (page - 1) * pageSize
+  return {
+    list: filtered.slice(start, start + pageSize).map((ticket) => ({ ...ticket })),
+    page,
+    pageSize,
+    total: filtered.length,
+  }
+}
+
+const roundMetric = (value: number) => Math.round(value * 10) / 10
+
+export const buildTicketMetrics = (startDate?: string, endDate?: string): DashboardMetricsDto => {
+  seedTickets()
+  const start = startDate ? dayjs(startDate).startOf('day') : dayjs().subtract(6, 'day').startOf('day')
+  const end = endDate ? dayjs(endDate).endOf('day') : dayjs().endOf('day')
+  const ranged = tickets.filter((ticket) => {
+    const createdAt = dayjs(ticket.createdAt)
+    return !createdAt.isBefore(start) && !createdAt.isAfter(end)
+  })
+  const doneTickets = ranged.filter((ticket) => ticket.status === 'done')
+  const dates: string[] = []
+  for (let cursor = start; !cursor.isAfter(end, 'day'); cursor = cursor.add(1, 'day')) {
+    dates.push(cursor.format('MM-DD'))
+  }
+  const createdByDate = new Map<string, number>()
+  const closedByDate = new Map<string, number>()
+  const statusCounts = new Map<TicketStatus, number>()
+  const durationByPriority = new Map<TicketPriority, number[]>()
+  ranged.forEach((ticket) => {
+    const createdKey = dayjs(ticket.createdAt).format('MM-DD')
+    createdByDate.set(createdKey, (createdByDate.get(createdKey) || 0) + 1)
+    if (ticket.status === 'done') {
+      const closedKey = dayjs(ticket.updatedAt).format('MM-DD')
+      closedByDate.set(closedKey, (closedByDate.get(closedKey) || 0) + 1)
+    }
+    statusCounts.set(ticket.status, (statusCounts.get(ticket.status) || 0) + 1)
+    const hours = Math.max(0, dayjs(ticket.updatedAt).diff(dayjs(ticket.createdAt), 'minute') / 60)
+    const values = durationByPriority.get(ticket.priority) || []
+    values.push(hours)
+    durationByPriority.set(ticket.priority, values)
+  })
+  const averageHours = doneTickets.length
+    ? doneTickets.reduce((sum, ticket) => sum + Math.max(0, dayjs(ticket.updatedAt).diff(dayjs(ticket.createdAt), 'minute') / 60), 0) / doneTickets.length
+    : 0
+  const statusLabels: Record<TicketStatus, string> = {
+    pending: '待处理',
+    claiming: '接单待审',
+    processing: '处理中',
+    review: '待复核',
+    done: '已完成',
+  }
+  const priorityLabels: Record<TicketPriority, string> = {
+    urgent: '紧急',
+    high: '高优先级',
+    medium: '中优先级',
+    low: '低优先级',
+  }
+  return {
+    range: { startDate: start.toISOString(), endDate: end.toISOString() },
+    overview: {
+      ticketTotal: ranged.length,
+      doneRate: ranged.length ? roundMetric((doneTickets.length * 100) / ranged.length) : 0,
+      avgHandleHours: roundMetric(averageHours),
+      urgentRate: ranged.length ? roundMetric((ranged.filter((ticket) => ticket.priority === 'urgent').length * 100) / ranged.length) : 0,
+    },
+    trend: {
+      dates,
+      created: dates.map((date) => createdByDate.get(date) || 0),
+      closed: dates.map((date) => closedByDate.get(date) || 0),
+    },
+    categories: (Object.keys(statusLabels) as TicketStatus[]).map((status) => ({
+      name: statusLabels[status],
+      value: statusCounts.get(status) || 0,
+    })),
+    durations: (Object.keys(priorityLabels) as TicketPriority[]).map((priority) => {
+      const values = durationByPriority.get(priority) || []
+      return {
+        name: priorityLabels[priority],
+        hours: values.length ? roundMetric(values.reduce((sum, value) => sum + value, 0) / values.length) : 0,
+      }
+    }),
+  }
 }
 
 export const listRelatedTicketsByAsset = (assetId: string): RelatedTicketDto[] => {

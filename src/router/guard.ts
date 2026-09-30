@@ -27,7 +27,7 @@ export const setupRouterGuard = (router: Router) => {
     }
 
     if (to.path === '/login' && authStore.isAuthenticated) {
-      return '/dashboard'
+      return '/home'
     }
 
 //用户虽授权，但store中没有用户信息，尝试拉取用户信息，

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import { RobotOutlined, UserOutlined } from '@ant-design/icons-vue'
 import { BubbleList, Welcome, XSender } from 'vue-element-plus-x'
 import type { BubbleListItemProps } from 'vue-element-plus-x/types/BubbleList'
@@ -24,6 +24,7 @@ type ChatBubble = BubbleListItemProps & {
   reasoningExpanded?: boolean
 }
 
+const props = defineProps<{ initialQuestion?: string }>()
 const { store, send, stop } = useChat()
 const senderRef = ref<InstanceType<typeof XSender>>()
 const Preview = defineAsyncComponent(() => import('@/components/markdown/MdPreviewAsync.vue'))
@@ -77,6 +78,13 @@ const askSuggestion = async (question: string) => {
   if (store.loading) return
   await send(question)
 }
+
+onMounted(() => {
+  const question = props.initialQuestion?.trim()
+  if (question) {
+    void send(question)
+  }
+})
 
 const stepDescription = (step: AgentPlanStepDto) => {
   const payload = step.payload || {}

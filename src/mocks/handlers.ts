@@ -17,7 +17,6 @@ import type {
   TicketListQueryDto,
   UpdateTicketDto,
 } from '@/types/ticket'
-import type { DashboardMetricsQueryDto } from '@/types/dashboard'
 import type { KbChunkDto, KbDocumentDto, KbListQueryDto, SaveKbDto } from '@/types/kb'
 import {
   buildMenuData,
@@ -34,9 +33,6 @@ import {
   setMockUserStatus,
   verifyMockUser,
 } from './db'
-import {
-  buildDashboardMetrics,
-} from './dashboardDb'
 import {
   getKbDetail,
   getKbVersions,
@@ -59,6 +55,8 @@ import {
   listRelatedTicketsByAsset,
   listTicketComments,
   queryTickets,
+  queryClaimQueue,
+  buildTicketMetrics,
   updateTicket,
   uploadTicketAttachment,
 } from './ticketDb'
@@ -374,6 +372,17 @@ export const handlers = [
     return ok(queryTickets(query))
   }),
 
+  http.get('/api/tickets/claim-queue', async ({ request }) => {
+    if (shouldPassthroughTicketBackend) return passthrough()
+    const session = getSession(request)
+    if (!session) return fail(401, 'token 无效')
+    const permissions = buildUserProfile(session.username).permissions
+    if (!permissions.includes('ticket:claim')) return fail(403, '无权限执行该操作')
+    const url = new URL(request.url)
+    const user = getUser(session.username)
+    return ok(queryClaimQueue(user?.id || session.username, Number(url.searchParams.get('page') || 1), Number(url.searchParams.get('pageSize') || 50)))
+  }),
+
   http.get('/api/tickets/:id', async ({ request, params }) => {
     if (shouldPassthroughTicketBackend) {
       return passthrough()
@@ -630,18 +639,19 @@ export const handlers = [
     }
   }),
 
-  http.get('/api/dashboard/metrics', async ({ request }) => {
+  http.get('/api/ops/dashboard/metrics', async ({ request }) => {
+    if (shouldPassthroughTicketBackend) return passthrough()
     await delay(220)
     const session = getSession(request)
     if (!session) {
       return fail(401, 'token 无效')
     }
-    const url = new URL(request.url)
-    const query: DashboardMetricsQueryDto = {
-      startDate: url.searchParams.get('startDate') || undefined,
-      endDate: url.searchParams.get('endDate') || undefined,
+    const permissions = buildUserProfile(session.username).permissions
+    if (!permissions.includes('dashboard:view')) {
+      return fail(403, '无权限执行该操作')
     }
-    return ok(buildDashboardMetrics(query.startDate, query.endDate))
+    const url = new URL(request.url)
+    return ok(buildTicketMetrics(url.searchParams.get('startDate') || undefined, url.searchParams.get('endDate') || undefined))
   }),
 
   http.get('/api/kb/documents', async ({ request }) => {

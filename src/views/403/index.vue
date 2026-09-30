@@ -6,7 +6,7 @@
       sub-title="抱歉，你没有权限访问该页面。"
     >
       <template #extra>
-        <RouterLink to="/dashboard">
+        <RouterLink to="/home">
           <a-button type="primary">返回 Dashboard</a-button>
         </RouterLink>
       </template>

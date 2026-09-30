@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { PlusOutlined } from '@ant-design/icons-vue'
 import { Conversations } from 'vue-element-plus-x'
 import type { ConversationItem } from 'vue-element-plus-x/types/Conversations'
@@ -9,7 +10,9 @@ import type { ConversationDto } from '@/types/agent'
 
 defineOptions({ name: 'AgentChat' })
 
+const route = useRoute()
 const store = useChatStore()
+const initialQuestion = computed(() => String(route.query.q || ''))
 const conversationItems = computed<Array<ConversationItem<ConversationDto>>>(() =>
   store.conversations.map((item) => ({ ...item, label: item.title })),
 )
@@ -47,7 +50,7 @@ onMounted(() => {
         <div><strong>NovaOps 企业知识助手</strong><span>回答均基于企业知识库并附来源引用</span></div>
         <span class="online-badge"><i></i> 服务在线</span>
       </header>
-      <ChatCore />
+      <ChatCore :initial-question="initialQuestion" />
     </main>
   </section>
 </template>
