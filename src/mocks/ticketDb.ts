@@ -356,6 +356,9 @@ export const actionTicket = (
       case 'reject':
         return status === 'review'
       case 'close':
+        if (status === 'claiming') {
+          throw new Error('接单待审的工单不可直接关闭')
+        }
         return status === 'processing' || status === 'review'
       default:
         return false
@@ -488,6 +491,18 @@ export const uploadTicketAttachment = (
   return clone(attachment)
 }
 
+export const queryMine = (userId: string, page = 1, pageSize = 50): PageResult<TicketListItemDto> => {
+  seedTickets()
+  const filtered = tickets.filter((ticket) => ticket.assigneeId === userId)
+  const start = (page - 1) * pageSize
+  return {
+    list: filtered.slice(start, start + pageSize).map((ticket) => ({ ...ticket })),
+    page,
+    pageSize,
+    total: filtered.length,
+  }
+}
+
 export const queryClaimQueue = (userId: string, page = 1, pageSize = 50): PageResult<TicketListItemDto> => {
   seedTickets()
   const filtered = tickets.filter(
@@ -504,10 +519,21 @@ export const queryClaimQueue = (userId: string, page = 1, pageSize = 50): PageRe
 
 const roundMetric = (value: number) => Math.round(value * 10) / 10
 
+const completionAt = (ticket: TicketDetailDto) => {
+  const doneEvents = ticket.timeline.filter((item) => item.toStatus === 'done')
+  if (!doneEvents.length) {
+    return ticket.status === 'done' ? ticket.updatedAt : null
+  }
+  return doneEvents.reduce((latest, item) => (dayjs(item.createdAt).isAfter(latest) ? item.createdAt : latest), doneEvents[0]?.createdAt || ticket.updatedAt)
+}
+
 export const buildTicketMetrics = (startDate?: string, endDate?: string): DashboardMetricsDto => {
   seedTickets()
   const start = startDate ? dayjs(startDate).startOf('day') : dayjs().subtract(6, 'day').startOf('day')
   const end = endDate ? dayjs(endDate).endOf('day') : dayjs().endOf('day')
+  if (end.startOf('day').diff(start.startOf('day'), 'day') > 366) {
+    throw new Error('统计区间不能超过 366 天')
+  }
   const ranged = tickets.filter((ticket) => {
     const createdAt = dayjs(ticket.createdAt)
     return !createdAt.isBefore(start) && !createdAt.isAfter(end)
@@ -515,27 +541,39 @@ export const buildTicketMetrics = (startDate?: string, endDate?: string): Dashbo
   const doneTickets = ranged.filter((ticket) => ticket.status === 'done')
   const dates: string[] = []
   for (let cursor = start; !cursor.isAfter(end, 'day'); cursor = cursor.add(1, 'day')) {
-    dates.push(cursor.format('MM-DD'))
+    dates.push(cursor.format('YYYY-MM-DD'))
   }
   const createdByDate = new Map<string, number>()
   const closedByDate = new Map<string, number>()
   const statusCounts = new Map<TicketStatus, number>()
   const durationByPriority = new Map<TicketPriority, number[]>()
   ranged.forEach((ticket) => {
-    const createdKey = dayjs(ticket.createdAt).format('MM-DD')
+    const createdKey = dayjs(ticket.createdAt).format('YYYY-MM-DD')
     createdByDate.set(createdKey, (createdByDate.get(createdKey) || 0) + 1)
-    if (ticket.status === 'done') {
-      const closedKey = dayjs(ticket.updatedAt).format('MM-DD')
-      closedByDate.set(closedKey, (closedByDate.get(closedKey) || 0) + 1)
-    }
     statusCounts.set(ticket.status, (statusCounts.get(ticket.status) || 0) + 1)
-    const hours = Math.max(0, dayjs(ticket.updatedAt).diff(dayjs(ticket.createdAt), 'minute') / 60)
+  })
+  tickets.forEach((ticket) => {
+    if (ticket.status !== 'done') return
+    const doneAt = completionAt(ticket)
+    if (!doneAt) return
+    const closedAt = dayjs(doneAt)
+    if (closedAt.isBefore(start) || closedAt.isAfter(end)) return
+    const closedKey = closedAt.format('YYYY-MM-DD')
+    closedByDate.set(closedKey, (closedByDate.get(closedKey) || 0) + 1)
+  })
+  doneTickets.forEach((ticket) => {
+    const doneAt = completionAt(ticket)
+    if (!doneAt) return
+    const hours = Math.max(0, dayjs(doneAt).diff(dayjs(ticket.createdAt), 'minute') / 60)
     const values = durationByPriority.get(ticket.priority) || []
     values.push(hours)
     durationByPriority.set(ticket.priority, values)
   })
   const averageHours = doneTickets.length
-    ? doneTickets.reduce((sum, ticket) => sum + Math.max(0, dayjs(ticket.updatedAt).diff(dayjs(ticket.createdAt), 'minute') / 60), 0) / doneTickets.length
+    ? doneTickets.reduce((sum, ticket) => {
+        const doneAt = completionAt(ticket)
+        return sum + (doneAt ? Math.max(0, dayjs(doneAt).diff(dayjs(ticket.createdAt), 'minute') / 60) : 0)
+      }, 0) / doneTickets.length
     : 0
   const statusLabels: Record<TicketStatus, string> = {
     pending: '待处理',

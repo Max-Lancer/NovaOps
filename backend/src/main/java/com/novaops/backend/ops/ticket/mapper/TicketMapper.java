@@ -39,9 +39,25 @@ public interface TicketMapper {
       @Param("limit") long limit
   );
 
+  long countMine(@Param("userId") String userId);
+
+  List<TicketRecord> queryMine(
+      @Param("userId") String userId,
+      @Param("offset") long offset,
+      @Param("limit") long limit
+  );
+
   void insertTicket(TicketRecord record);
 
+  /** 只改标题、描述、优先级和截止时间，不回写状态与负责人。 */
   int updateTicket(TicketRecord record);
+
+  /**
+   * 按预期状态做条件更新。影响行数为 0 表示状态已被别人改掉。
+   */
+  int transitionTicket(@Param("ticket") TicketRecord ticket, @Param("expectedStatus") String expectedStatus);
+
+  int touchUpdatedAt(@Param("ticketId") String ticketId, @Param("updatedAt") LocalDateTime updatedAt);
 
   void deleteAssetRelations(@Param("ticketId") String ticketId);
 

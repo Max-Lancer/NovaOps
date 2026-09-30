@@ -219,6 +219,17 @@ const opsMenu = (id: string, includeAssets: boolean): MenuItemDto => ({
           keepAlive: true,
         }]
       : []),
+    ...(id === 'ops'
+      ? [{
+          id: `${id}-claim`,
+          title: '待接工单',
+          name: 'ClaimQueue',
+          path: '/ops/ticket/claim',
+          component: 'ClaimQueueView',
+          permission: 'ticket:claim',
+          keepAlive: true,
+        }]
+      : []),
   ],
 })
 
@@ -258,6 +269,7 @@ const menuTemplates: Record<MenuTemplateKey, MenuItemDto[]> = {
   member: [
     homeMenu('member-home'),
     { id: 'member-claim', title: '待接工单', name: 'ClaimQueue', path: '/ops/ticket/claim', component: 'ClaimQueueView', icon: 'ticket', permission: 'ticket:claim', keepAlive: true },
+    { id: 'member-mine', title: '我的工单', name: 'MyTickets', path: '/ops/ticket/mine', component: 'MyTicketsView', icon: 'ticket', permission: 'ticket:claim', keepAlive: true },
   ],
   guest: [homeMenu('guest-home')],
 }

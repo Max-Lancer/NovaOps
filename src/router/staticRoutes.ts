@@ -29,7 +29,6 @@ export const staticRoutes: RouteRecordRaw[] = [
         component: () => import('@/views/ticket/detail.vue'),
         meta: {
           title: '工单详情',
-          permission: 'ticket:view',
           keepAlive: false,
         },
       },

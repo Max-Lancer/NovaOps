@@ -1,5 +1,7 @@
 -- 工作台入口与运维模块：接单申请人、菜单分组、员工菜单范围。
 -- 在已有库上执行；全新安装直接使用 novaops_init.sql。
+-- 只能执行一次：重复执行会因列或主键已存在而失败。回滚见 rollback_workbench_ops.sql。
+-- 若已继续执行 migration_ticket_assignee_flow.sql，请先回滚后者。
 
 alter table biz_ticket
   add column claimant_id varchar(64) null after assignee_id,

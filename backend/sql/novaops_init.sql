@@ -224,11 +224,13 @@ create table biz_ticket (
   due_date datetime null,
   created_at datetime not null,
   updated_at datetime not null,
+  done_at datetime null,
   index idx_ticket_updated (updated_at desc),
   index idx_ticket_status (status),
   index idx_ticket_priority (priority),
   index idx_ticket_assignee (assignee_id),
   index idx_ticket_creator (creator_id),
+  index idx_ticket_done_at (done_at),
   constraint fk_ticket_assignee foreign key (assignee_id) references sys_user (id),
   constraint fk_ticket_claimant foreign key (claimant_id) references sys_user (id),
   constraint fk_ticket_creator foreign key (creator_id) references sys_user (id)
@@ -393,6 +395,7 @@ insert into sys_menu (id, title, name, path, component, icon, permission_code, k
   ('full-ops', '运维', 'OpsRoot', '/ops', 'RouteView', 'ticket', null, 1, null, 20, 'full'),
   ('full-dashboard', '运维看板', 'Dashboard', '/ops/dashboard', 'DashboardView', 'dashboard', 'dashboard:view', 1, 'full-ops', 21, 'full'),
   ('full-ticket-list', '工单列表', 'TicketList', '/ops/ticket/list', 'TicketListView', null, 'ticket:view', 1, 'full-ops', 22, 'full'),
+  ('full-claim', '待接工单', 'ClaimQueue', '/ops/ticket/claim', 'ClaimQueueView', null, 'ticket:claim', 1, 'full-ops', 24, 'full'),
   ('full-asset-list', '资产列表', 'AssetList', '/ops/asset/list', 'AssetListView', null, 'asset:view', 1, 'full-ops', 23, 'full'),
   ('full-kb', '知识库', 'KbRoot', '/kb', 'RouteView', 'kb', null, 1, null, 40, 'full'),
   ('full-kb-list', '文章列表', 'KbList', '/kb/list', 'KbListView', null, 'kb:view', 1, 'full-kb', 41, 'full'),
@@ -408,13 +411,14 @@ insert into sys_menu (id, title, name, path, component, icon, permission_code, k
   ('staff-agent-tasks', '任务中心', 'AgentTasks', '/agent/tasks', 'AgentTasksView', 'robot', 'agent:task', 1, null, 46, 'staff'),
   ('member-home', '工作台', 'Home', '/home', 'HomeView', 'home', 'agent:chat', 1, null, 10, 'member'),
   ('member-claim', '待接工单', 'ClaimQueue', '/ops/ticket/claim', 'ClaimQueueView', 'ticket', 'ticket:claim', 1, null, 20, 'member'),
+  ('member-mine', '我的工单', 'MyTickets', '/ops/ticket/mine', 'MyTicketsView', 'ticket', 'ticket:claim', 1, null, 21, 'member'),
   ('guest-home', '工作台', 'Home', '/home', 'HomeView', 'home', 'agent:chat', 1, null, 10, 'guest');
 
-insert into biz_ticket (id, title, description, status, priority, assignee_id, creator_id, due_date, created_at, updated_at) values
-  ('A-TICKET-0001', 'TENANT-A 网络与终端巡检异常 #1', '巡检发现交换机端口丢包，需要排查链路质量。', 'pending', 'medium', 'u-tom', 'u-admin', '2026-04-25 18:00:00', '2026-04-20 09:00:00', '2026-04-20 11:00:00'),
-  ('A-TICKET-0002', 'TENANT-A VPN 访问波动 #2', '多名员工反馈 VPN 间歇性掉线，需排查网关与策略。', 'processing', 'high', 'u-jerry', 'u-admin', '2026-04-24 18:00:00', '2026-04-19 10:00:00', '2026-04-20 12:30:00'),
-  ('A-TICKET-0003', 'TENANT-A 终端补丁异常 #3', 'Windows 补丁安装失败，影响办公终端安全合规。', 'review', 'urgent', 'u-alice', 'u-staff', '2026-04-23 18:00:00', '2026-04-18 13:00:00', '2026-04-20 14:00:00'),
-  ('A-TICKET-0004', 'TENANT-A 日志采集恢复验证 #4', '采集链路已恢复，需要复核日志完整性与时间同步。', 'done', 'low', 'u-admin', 'u-staff', '2026-04-22 18:00:00', '2026-04-17 14:00:00', '2026-04-20 15:00:00');
+insert into biz_ticket (id, title, description, status, priority, assignee_id, creator_id, due_date, created_at, updated_at, done_at) values
+  ('A-TICKET-0001', 'TENANT-A 网络与终端巡检异常 #1', '巡检发现交换机端口丢包，需要排查链路质量。', 'pending', 'medium', 'u-tom', 'u-admin', '2026-04-25 18:00:00', '2026-04-20 09:00:00', '2026-04-20 11:00:00', null),
+  ('A-TICKET-0002', 'TENANT-A VPN 访问波动 #2', '多名员工反馈 VPN 间歇性掉线，需排查网关与策略。', 'processing', 'high', 'u-jerry', 'u-admin', '2026-04-24 18:00:00', '2026-04-19 10:00:00', '2026-04-20 12:30:00', null),
+  ('A-TICKET-0003', 'TENANT-A 终端补丁异常 #3', 'Windows 补丁安装失败，影响办公终端安全合规。', 'review', 'urgent', 'u-alice', 'u-staff', '2026-04-23 18:00:00', '2026-04-18 13:00:00', '2026-04-20 14:00:00', null),
+  ('A-TICKET-0004', 'TENANT-A 日志采集恢复验证 #4', '采集链路已恢复，需要复核日志完整性与时间同步。', 'done', 'low', 'u-admin', 'u-staff', '2026-04-22 18:00:00', '2026-04-17 14:00:00', '2026-04-20 15:00:00', '2026-04-20 15:00:00');
 
 insert into biz_ticket_asset_rel (ticket_id, asset_id) values
   ('A-TICKET-0001', 'ASSET-1'),

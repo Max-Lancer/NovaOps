@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onActivated, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { createTicketApi } from '@/api/ticket'
@@ -26,6 +26,7 @@ const canAsk = computed(() => authStore.permissions.includes('agent:chat'))
 const canConfirm = computed(() => authStore.permissions.includes('agent:task'))
 const canReport = computed(() => authStore.permissions.includes('ticket:create'))
 const canClaim = computed(() => authStore.permissions.includes('ticket:claim'))
+const canViewTickets = computed(() => authStore.permissions.includes('ticket:view'))
 const canDashboard = computed(() => authStore.permissions.includes('dashboard:view'))
 
 const ask = () => {
@@ -45,6 +46,8 @@ const loadConfirmations = async () => {
   try {
     const tasks = await listTasksApi()
     confirmations.value = tasks.filter((task) => task.status === 'AWAITING_CONFIRM')
+  } catch {
+    confirmations.value = []
   } finally {
     loadingConfirmations.value = false
   }
@@ -53,7 +56,7 @@ const loadConfirmations = async () => {
 const submitReport = async () => {
   if (!reportForm.title.trim() || !reportForm.description.trim()) {
     message.warning('请填写标题和描述')
-    return Promise.reject(new Error('invalid'))
+    return
   }
   submitting.value = true
   try {
@@ -76,6 +79,10 @@ const submitReport = async () => {
 }
 
 onMounted(() => {
+  void loadConfirmations()
+})
+
+onActivated(() => {
   void loadConfirmations()
 })
 </script>
@@ -108,6 +115,7 @@ onMounted(() => {
           <a-space wrap>
             <a-button v-if="canReport" @click="reportOpen = true">报故障</a-button>
             <a-button v-if="canClaim" @click="router.push('/ops/ticket/claim')">待接工单</a-button>
+            <a-button v-if="canClaim && !canViewTickets" @click="router.push('/ops/ticket/mine')">我的工单</a-button>
             <a-button v-if="canDashboard" type="primary" @click="router.push('/ops/dashboard')">运维看板</a-button>
           </a-space>
         </div>

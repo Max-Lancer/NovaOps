@@ -98,8 +98,23 @@ public class TicketService {
     return new PageResult<>(list, page, pageSize, total);
   }
 
+  /** 当前用户负责的工单。不要求 ticket:view，避免把全部工单开放给员工。 */
+  public PageResult<TicketListItemResponse> listMine(CurrentSession session, TicketListQuery query) {
+    long page = query.getPage() == null || query.getPage() < 1 ? 1 : query.getPage();
+    long pageSize = query.getPageSize() == null || query.getPageSize() < 1 ? 10 : query.getPageSize();
+    long offset = (page - 1) * pageSize;
+    long total = ticketMapper.countMine(session.getUserId());
+    List<TicketRecord> records = ticketMapper.queryMine(session.getUserId(), offset, pageSize);
+    Map<String, List<String>> assetMap = buildAssetMap(records.stream().map(TicketRecord::getId).toList());
+    List<TicketListItemResponse> list = records.stream()
+        .map(record -> toListItem(record, assetMap.getOrDefault(record.getId(), Collections.emptyList())))
+        .toList();
+    return new PageResult<>(list, page, pageSize, total);
+  }
+
   public TicketDetailResponse detail(CurrentSession session, String ticketId) {
     TicketRecord record = requireTicket(ticketId);
+    requireAssigneeOrPermission(session, record, "ticket:view");
     return buildDetail(record);
   }
 
@@ -171,9 +186,12 @@ public class TicketService {
       case "reject_claim" -> "ticket:claim:approve";
       default -> throw new BusinessException(400, "不支持的工单动作");
     };
-    authService.requirePermission(session, requiredPermission);
-
     TicketRecord record = requireTicket(ticketId);
+    // 审批通过后负责人往往只有 ticket:claim，允许其提交自己名下工单的复核
+    boolean assigneeMayAdvance = "advance".equals(action) && isAssignee(session, record);
+    if (!assigneeMayAdvance) {
+      authService.requirePermission(session, requiredPermission);
+    }
     String previousStatus = record.getStatus();
 
     // 状态机前置校验：非法转移直接拒绝（409），防止跨状态倒退/重复关单/越权流转
@@ -222,8 +240,14 @@ public class TicketService {
       default -> throw new BusinessException(400, "不支持的工单动作");
     }
 
-    record.setUpdatedAt(LocalDateTime.now());
-    ticketMapper.updateTicket(record);
+    LocalDateTime now = LocalDateTime.now();
+    record.setUpdatedAt(now);
+    if ("done".equals(record.getStatus())) {
+      record.setDoneAt(now);
+    }
+    if (ticketMapper.transitionTicket(record, previousStatus) == 0) {
+      throw new BusinessException(409, "工单状态已变化，请刷新后重试");
+    }
     ticketMapper.insertTimeline(buildTimeline(
         record.getId(),
         action,
@@ -240,7 +264,7 @@ public class TicketService {
   /**
    * 工单状态机转移矩阵：只有命中合法转移才放行，否则抛 409。
    * 状态：pending(待处理) → claiming(接单待审) → processing(处理中) → review(待复核) → done(已完成)。
-   * 待处理也可由 assign 直接进入处理中。claiming 期间不能指派。
+   * 待处理也可由 assign 直接进入处理中。claiming 期间不能指派，也不能直接关闭。
    */
   private void validateTransition(String action, String currentStatus) {
     switch (action) {
@@ -291,6 +315,9 @@ public class TicketService {
         if ("pending".equals(currentStatus)) {
           throw new BusinessException(409, "待处理的工单不可直接关闭，请先指派");
         }
+        if ("claiming".equals(currentStatus)) {
+          throw new BusinessException(409, "接单待审的工单不可直接关闭");
+        }
         if ("done".equals(currentStatus)) {
           throw new BusinessException(409, "工单已关闭，不可重复关闭");
         }
@@ -300,13 +327,15 @@ public class TicketService {
   }
 
   public List<TicketCommentResponse> comments(CurrentSession session, String ticketId) {
-    requireTicket(ticketId);
+    TicketRecord record = requireTicket(ticketId);
+    requireAssigneeOrPermission(session, record, "ticket:view");
     return ticketMapper.listComments(ticketId).stream().map(this::toComment).toList();
   }
 
   @Transactional
   public TicketCommentResponse createComment(CurrentSession session, String ticketId, CreateCommentRequest request) {
     TicketRecord record = requireTicket(ticketId);
+    requireAssigneeOrPermission(session, record, "ticket:comment");
     LocalDateTime now = LocalDateTime.now();
 
     TicketCommentRecord comment = new TicketCommentRecord();
@@ -316,15 +345,14 @@ public class TicketService {
     comment.setContent(request.getContent().trim());
     comment.setCreatedAt(now);
     ticketMapper.insertComment(comment);
-
-    record.setUpdatedAt(now);
-    ticketMapper.updateTicket(record);
+    ticketMapper.touchUpdatedAt(ticketId, now);
     return toComment(comment);
   }
 
   @Transactional
   public TicketAttachmentResponse uploadAttachment(CurrentSession session, String ticketId, MultipartFile file) {
     TicketRecord record = requireTicket(ticketId);
+    requireAssigneeOrPermission(session, record, "ticket:comment");
     LocalDateTime now = LocalDateTime.now();
     String attachmentId = IdGenerator.randomId("att");
     TicketAttachmentStorage.StoredAttachment stored = attachmentStorage.save(ticketId, attachmentId, file);
@@ -339,8 +367,7 @@ public class TicketService {
 
     try {
       ticketMapper.insertAttachment(attachment);
-      record.setUpdatedAt(now);
-      ticketMapper.updateTicket(record);
+      ticketMapper.touchUpdatedAt(ticketId, now);
     } catch (RuntimeException ex) {
       // 元数据没落库就不留文件实体，避免磁盘上多出永远访问不到的孤儿附件
       attachmentStorage.delete(stored.path());
@@ -351,7 +378,8 @@ public class TicketService {
 
   /** 下载前校验工单与附件归属，并确认文件实体仍在磁盘上。 */
   public AttachmentDownload loadAttachment(CurrentSession session, String ticketId, String attachmentId) {
-    requireTicket(ticketId);
+    TicketRecord record = requireTicket(ticketId);
+    requireAssigneeOrPermission(session, record, "ticket:view");
     TicketAttachmentRecord attachment = ticketMapper.findAttachment(ticketId, attachmentId);
     if (attachment == null) {
       throw new BusinessException(404, "附件不存在");
@@ -361,6 +389,18 @@ public class TicketService {
       throw new BusinessException(404, "附件文件已丢失");
     }
     return new AttachmentDownload(attachment.getName(), attachment.getSize() == null ? 0L : attachment.getSize(), new FileSystemResource(path));
+  }
+
+  private boolean isAssignee(CurrentSession session, TicketRecord record) {
+    return session.getUserId() != null && session.getUserId().equals(record.getAssigneeId());
+  }
+
+  /** 负责人可以看和处理自己的工单；其他人仍走原权限码。 */
+  private void requireAssigneeOrPermission(CurrentSession session, TicketRecord record, String permission) {
+    if (isAssignee(session, record)) {
+      return;
+    }
+    authService.requirePermission(session, permission);
   }
 
   private TicketRecord requireTicket(String ticketId) {

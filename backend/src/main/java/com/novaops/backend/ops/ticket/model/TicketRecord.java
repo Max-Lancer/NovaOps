@@ -18,6 +18,7 @@ public class TicketRecord {
   private LocalDateTime dueDate;
   private LocalDateTime createdAt;
   private LocalDateTime updatedAt;
+  private LocalDateTime doneAt;
 
   public String getId() {
     return id;
@@ -129,5 +130,13 @@ public class TicketRecord {
 
   public void setUpdatedAt(LocalDateTime updatedAt) {
     this.updatedAt = updatedAt;
+  }
+
+  public LocalDateTime getDoneAt() {
+    return doneAt;
+  }
+
+  public void setDoneAt(LocalDateTime doneAt) {
+    this.doneAt = doneAt;
   }
 }

@@ -12,6 +12,7 @@ const routeComponentMap: Record<string, RouteComponentLoader> = {
   DashboardView: () => import('@/views/ops/dashboard/index.vue'),
   TicketListView: () => import('@/views/ticket/list.vue'),
   ClaimQueueView: () => import('@/views/ticket/claim.vue'),
+  MyTicketsView: () => import('@/views/ticket/mine.vue'),
   TicketDetailView: () => import('@/views/ticket/detail.vue'),
   AssetListView: () => import('@/views/asset/list.vue'),
   KbListView: () => import('@/views/kb/list.vue'),

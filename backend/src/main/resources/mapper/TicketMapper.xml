@@ -40,7 +40,7 @@
            t.assignee_id, a.display_name as assignee_name,
            t.claimant_id, cl.display_name as claimant_name,
            t.creator_id, c.display_name as creator_name,
-           t.due_date, t.created_at, t.updated_at
+           t.due_date, t.created_at, t.updated_at, t.done_at
     from biz_ticket t
     left join sys_user a on a.id = t.assignee_id
     left join sys_user cl on cl.id = t.claimant_id
@@ -55,7 +55,7 @@
            t.assignee_id, a.display_name as assignee_name,
            t.claimant_id, cl.display_name as claimant_name,
            t.creator_id, c.display_name as creator_name,
-           t.due_date, t.created_at, t.updated_at
+           t.due_date, t.created_at, t.updated_at, t.done_at
     from biz_ticket t
     left join sys_user a on a.id = t.assignee_id
     left join sys_user cl on cl.id = t.claimant_id
@@ -80,7 +80,7 @@
            t.assignee_id, a.display_name as assignee_name,
            t.claimant_id, cl.display_name as claimant_name,
            t.creator_id, c.display_name as creator_name,
-           t.due_date, t.created_at, t.updated_at
+           t.due_date, t.created_at, t.updated_at, t.done_at
     from biz_ticket t
     left join sys_user a on a.id = t.assignee_id
     left join sys_user cl on cl.id = t.claimant_id
@@ -116,18 +116,58 @@
     )
   </insert>
 
+  <sql id="mineFilter">
+    where t.assignee_id = #{userId}
+  </sql>
+
+  <select id="countMine" resultType="long">
+    select count(1)
+    from biz_ticket t
+    <include refid="mineFilter" />
+  </select>
+
+  <select id="queryMine" resultType="com.novaops.backend.ops.ticket.model.TicketRecord">
+    select t.id, t.title, t.description, t.status, t.priority,
+           t.assignee_id, a.display_name as assignee_name,
+           t.claimant_id, cl.display_name as claimant_name,
+           t.creator_id, c.display_name as creator_name,
+           t.due_date, t.created_at, t.updated_at, t.done_at
+    from biz_ticket t
+    left join sys_user a on a.id = t.assignee_id
+    left join sys_user cl on cl.id = t.claimant_id
+    left join sys_user c on c.id = t.creator_id
+    <include refid="mineFilter" />
+    order by t.updated_at desc
+    limit #{limit} offset #{offset}
+  </select>
+
   <update id="updateTicket" parameterType="com.novaops.backend.ops.ticket.model.TicketRecord">
     update biz_ticket
     set title = #{title},
         description = #{description},
-        status = #{status},
         priority = #{priority},
-        assignee_id = #{assigneeId},
-        claimant_id = #{claimantId},
-        creator_id = #{creatorId},
-        due_date = #{dueDate},
+        due_date = #{dueDate,jdbcType=TIMESTAMP},
         updated_at = #{updatedAt}
     where id = #{id}
+  </update>
+
+  <update id="transitionTicket">
+    update biz_ticket
+    set status = #{ticket.status},
+        assignee_id = #{ticket.assigneeId,jdbcType=VARCHAR},
+        claimant_id = #{ticket.claimantId,jdbcType=VARCHAR},
+        updated_at = #{ticket.updatedAt}
+        <if test="ticket.doneAt != null">
+          , done_at = #{ticket.doneAt}
+        </if>
+    where id = #{ticket.id}
+      and status = #{expectedStatus}
+  </update>
+
+  <update id="touchUpdatedAt">
+    update biz_ticket
+    set updated_at = #{updatedAt}
+    where id = #{ticketId}
   </update>
 
   <delete id="deleteAssetRelations">

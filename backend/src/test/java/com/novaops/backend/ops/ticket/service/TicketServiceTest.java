@@ -3,6 +3,8 @@ package com.novaops.backend.ops.ticket.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -12,6 +14,7 @@ import com.novaops.backend.auth.model.UserRecord;
 import com.novaops.backend.auth.service.AuthService;
 import com.novaops.backend.common.exception.BusinessException;
 import com.novaops.backend.common.security.CurrentSession;
+import com.novaops.backend.ops.ticket.dto.CreateCommentRequest;
 import com.novaops.backend.ops.ticket.dto.TicketActionRequest;
 import com.novaops.backend.ops.ticket.dto.TicketDetailResponse;
 import com.novaops.backend.ops.ticket.mapper.TicketMapper;
@@ -64,6 +67,7 @@ class TicketServiceTest {
       user.setId(assigneeId);
       when(authService.requireEnabledUser(assigneeId)).thenReturn(user);
     }
+    when(ticketMapper.transitionTicket(any(), any())).thenReturn(1);
   }
 
   @Test
@@ -75,7 +79,8 @@ class TicketServiceTest {
 
     assertThat(response.getStatus()).isEqualTo("processing");
     assertThat(response.getAssigneeId()).isEqualTo("u-staff");
-    verify(ticketMapper).updateTicket(record);
+    verify(ticketMapper).transitionTicket(record, "pending");
+    verify(ticketMapper, never()).updateTicket(any());
   }
 
   @Test
@@ -85,7 +90,7 @@ class TicketServiceTest {
     assertThatThrownBy(() -> ticketService.action(SESSION, TICKET_ID, request("assign", "u-staff")))
         .isInstanceOf(BusinessException.class)
         .hasMessageContaining("仅待处理的工单可指派");
-    verify(ticketMapper, never()).updateTicket(any());
+    verify(ticketMapper, never()).transitionTicket(any(), any());
   }
 
   @Test
@@ -307,5 +312,67 @@ class TicketServiceTest {
     assertThatThrownBy(() -> ticketService.action(SESSION, TICKET_ID, request("approve_claim", null)))
         .isInstanceOf(BusinessException.class)
         .hasMessageContaining("不能审批自己的接单申请");
+  }
+
+  @Test
+  void closeOnClaimingIsRejected() {
+    stubCommon(recordOf("claiming"), null);
+
+    assertThatThrownBy(() -> ticketService.action(SESSION, TICKET_ID, request("close", null)))
+        .isInstanceOf(BusinessException.class)
+        .hasMessageContaining("接单待审的工单不可直接关闭");
+    verify(ticketMapper, never()).transitionTicket(any(), any());
+  }
+
+  @Test
+  void transitionConflictReturns409() {
+    TicketRecord record = recordOf("pending");
+    stubCommon(record, null);
+    when(ticketMapper.transitionTicket(any(), eq("pending"))).thenReturn(0);
+
+    assertThatThrownBy(() -> ticketService.action(SESSION, TICKET_ID, request("claim", null)))
+        .isInstanceOfSatisfying(BusinessException.class, ex -> {
+          assertThat(ex.getCode()).isEqualTo(409);
+          assertThat(ex.getMessage()).contains("状态已变化");
+        });
+    verify(ticketMapper, never()).insertTimeline(any());
+  }
+
+  @Test
+  void memberClaimThenStaffApproveThenMemberAdvance() {
+    CurrentSession member = new CurrentSession("u-member", "member", "员工");
+    CurrentSession staff = new CurrentSession("u-staff", "staff", "运维专员");
+    TicketRecord record = recordOf("pending");
+    stubCommon(record, "u-member");
+    doThrow(new BusinessException(403, "无权限执行该操作"))
+        .when(authService).requirePermission(member, "ticket:view");
+    doThrow(new BusinessException(403, "无权限执行该操作"))
+        .when(authService).requirePermission(member, "ticket:comment");
+    doThrow(new BusinessException(403, "无权限执行该操作"))
+        .when(authService).requirePermission(member, "ticket:advance");
+
+    assertThatThrownBy(() -> ticketService.detail(member, TICKET_ID))
+        .isInstanceOf(BusinessException.class)
+        .hasMessageContaining("无权限");
+
+    TicketDetailResponse claimed = ticketService.action(member, TICKET_ID, request("claim", null));
+    assertThat(claimed.getStatus()).isEqualTo("claiming");
+    assertThat(claimed.getClaimantId()).isEqualTo("u-member");
+
+    TicketDetailResponse approved = ticketService.action(staff, TICKET_ID, request("approve_claim", null));
+    assertThat(approved.getStatus()).isEqualTo("processing");
+    assertThat(approved.getAssigneeId()).isEqualTo("u-member");
+
+    assertThat(ticketService.detail(member, TICKET_ID).getId()).isEqualTo(TICKET_ID);
+
+    CreateCommentRequest comment = new CreateCommentRequest();
+    comment.setContent("已开始处理");
+    assertThat(ticketService.createComment(member, TICKET_ID, comment).getContent()).isEqualTo("已开始处理");
+    verify(ticketMapper).touchUpdatedAt(eq(TICKET_ID), any());
+    verify(ticketMapper, never()).updateTicket(any());
+
+    TicketDetailResponse advanced = ticketService.action(member, TICKET_ID, request("advance", null));
+    assertThat(advanced.getStatus()).isEqualTo("review");
+    verify(authService, never()).requirePermission(member, "ticket:advance");
   }
 }

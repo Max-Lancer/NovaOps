@@ -20,6 +20,10 @@ export const getClaimQueueApi = (params: TicketListQueryDto) => {
   return request.get<PageResult<TicketListItemDto>>('/tickets/claim-queue', { params })
 }
 
+export const getMyTicketsApi = (params: TicketListQueryDto) => {
+  return request.get<PageResult<TicketListItemDto>>('/tickets/mine', { params })
+}
+
 export const getTicketDetailApi = (id: string) => {
   return request.get<TicketDetailDto>(`/tickets/${id}`)
 }

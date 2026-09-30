@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import { message } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/store/auth'
 import { getAssetBatchApi } from '@/api/asset'
 import { getUserOptionsApi } from '@/api/auth'
 import {
@@ -23,6 +24,7 @@ defineOptions({
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 const loading = ref(false)
 const actionLoading = ref(false)
 const commentLoading = ref(false)
@@ -61,6 +63,12 @@ const allowedActionsByStatus: Record<TicketStatus, readonly TicketActionType[]> 
   review: ['transfer', 'approve', 'reject', 'close'],
   done: [],
 }
+
+const isAssignee = computed(() => {
+  const userId = authStore.user?.id
+  return Boolean(userId && detail.value?.assigneeId === userId)
+})
+const lacksPermission = (code: string) => !authStore.permissions.includes(code)
 
 const isActionAvailable = (action: TicketActionType) => {
   if (!detail.value) {
@@ -187,12 +195,14 @@ watch(
 )
 
 onMounted(() => {
-  void Promise.all([
-    refreshDetail(),
-    getUserOptionsApi().then((users) => {
+  void refreshDetail()
+  void getUserOptionsApi()
+    .then((users) => {
       assigneeUsers.value = users
-    }),
-  ])
+    })
+    .catch(() => {
+      assigneeUsers.value = []
+    })
 })
 </script>
 
@@ -270,6 +280,14 @@ onMounted(() => {
               提交复核
             </a-button>
           </Permission>
+          <a-button
+            v-if="isAssignee && lacksPermission('ticket:advance') && isActionAvailable('advance')"
+            size="small"
+            :loading="actionLoading"
+            @click="doAction('advance')"
+          >
+            提交复核
+          </a-button>
           <Permission code="ticket:approve">
             <a-button
               v-if="isActionAvailable('approve')"
@@ -387,6 +405,14 @@ onMounted(() => {
               <a-button type="primary" :loading="commentLoading" @click="submitComment">发表评论</a-button>
             </a-space>
           </Permission>
+          <a-space
+            v-if="isAssignee && lacksPermission('ticket:comment')"
+            direction="vertical"
+            style="width: 100%; margin-top: 12px"
+          >
+            <a-textarea v-model:value="newComment" :rows="3" placeholder="输入评论..." />
+            <a-button type="primary" :loading="commentLoading" @click="submitComment">发表评论</a-button>
+          </a-space>
         </a-card>
       </a-col>
 
@@ -397,6 +423,13 @@ onMounted(() => {
               <a-button type="dashed">上传附件</a-button>
             </a-upload>
           </Permission>
+          <a-upload
+            v-if="isAssignee && lacksPermission('ticket:comment')"
+            :show-upload-list="false"
+            :custom-request="handleUpload"
+          >
+            <a-button type="dashed">上传附件</a-button>
+          </a-upload>
           <a-list :data-source="detail?.attachments || []" size="small" class="mt12">
             <template #renderItem="{ item }">
               <a-list-item>

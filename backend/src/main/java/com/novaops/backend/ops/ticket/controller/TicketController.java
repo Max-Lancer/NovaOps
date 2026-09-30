@@ -56,8 +56,12 @@ public class TicketController {
     return ApiResponse.success(ticketService.listClaimQueue(RequestContext.getRequired(), query));
   }
 
+  @GetMapping("/mine")
+  public ApiResponse<PageResult<TicketListItemResponse>> mine(@Valid @ModelAttribute TicketListQuery query) {
+    return ApiResponse.success(ticketService.listMine(RequestContext.getRequired(), query));
+  }
+
   @GetMapping("/{id}")
-  @RequirePermission("ticket:view")
   public ApiResponse<TicketDetailResponse> detail(@PathVariable("id") String id) {
     return ApiResponse.success(ticketService.detail(RequestContext.getRequired(), id));
   }
@@ -81,19 +85,16 @@ public class TicketController {
   }
 
   @GetMapping("/{id}/comments")
-  @RequirePermission("ticket:view")
   public ApiResponse<List<TicketCommentResponse>> comments(@PathVariable("id") String id) {
     return ApiResponse.success(ticketService.comments(RequestContext.getRequired(), id));
   }
 
   @PostMapping("/{id}/comments")
-  @RequirePermission("ticket:comment")
   public ApiResponse<TicketCommentResponse> createComment(@PathVariable("id") String id, @Valid @RequestBody CreateCommentRequest request) {
     return ApiResponse.success(ticketService.createComment(RequestContext.getRequired(), id, request), "评论创建成功");
   }
 
   @PostMapping("/{id}/attachments")
-  @RequirePermission("ticket:comment")
   public ApiResponse<TicketAttachmentResponse> uploadAttachment(
       @PathVariable("id") String id,
       @RequestPart("file") MultipartFile file
@@ -103,7 +104,6 @@ public class TicketController {
 
   /** 附件实体不走 JSON 包装，直接回文件流；下载要带 Authorization 头，前端按 blob 取回再落盘。 */
   @GetMapping("/{id}/attachments/{attachmentId}/download")
-  @RequirePermission("ticket:view")
   public ResponseEntity<Resource> downloadAttachment(@PathVariable("id") String id, @PathVariable("attachmentId") String attachmentId) {
     AttachmentDownload download = ticketService.loadAttachment(RequestContext.getRequired(), id, attachmentId);
     ContentDisposition disposition = ContentDisposition.attachment()
