@@ -284,8 +284,11 @@ public class AuthService {
   }
 
   private String resolveMenuScopeByRole(String roleCode) {
-    if ("guest".equals(roleCode) || "member".equals(roleCode)) {
+    if ("guest".equals(roleCode)) {
       return "guest";
+    }
+    if ("member".equals(roleCode)) {
+      return "member";
     }
     if ("staff".equals(roleCode)) {
       return "staff";

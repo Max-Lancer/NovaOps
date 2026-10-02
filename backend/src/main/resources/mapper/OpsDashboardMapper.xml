@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.novaops.backend.ops.dashboard.mapper.OpsDashboardMapper">
+
+  <sql id="createdInRange">
+    created_at <![CDATA[>=]]> #{start} and created_at <![CDATA[<=]]> #{end}
+  </sql>
+
+  <select id="summarize" resultType="com.novaops.backend.ops.dashboard.model.TicketOverviewRow">
+    select count(1) as total,
+           coalesce(sum(case when status = 'done' then 1 else 0 end), 0) as done_count,
+           coalesce(sum(case when priority = 'urgent' then 1 else 0 end), 0) as urgent_count,
+           avg(case when status = 'done' and done_at is not null then timestampdiff(minute, created_at, done_at) / 60 end) as avg_done_hours
+    from biz_ticket
+    where <include refid="createdInRange" />
+  </select>
+
+  <select id="countCreatedByDay" resultType="com.novaops.backend.ops.dashboard.model.NamedCount">
+    select date_format(created_at, '%Y-%m-%d') as name, count(1) as value
+    from biz_ticket
+    where <include refid="createdInRange" />
+    group by date(created_at), date_format(created_at, '%Y-%m-%d')
+    order by date(created_at)
+  </select>
+
+  <select id="countClosedByDay" resultType="com.novaops.backend.ops.dashboard.model.NamedCount">
+    select date_format(done_at, '%Y-%m-%d') as name, count(1) as value
+    from biz_ticket
+    where status = 'done'
+      and done_at is not null
+      and done_at <![CDATA[>=]]> #{start}
+      and done_at <![CDATA[<=]]> #{end}
+    group by date(done_at), date_format(done_at, '%Y-%m-%d')
+    order by date(done_at)
+  </select>
+
+  <select id="countByStatus" resultType="com.novaops.backend.ops.dashboard.model.NamedCount">
+    select status as name, count(1) as value
+    from biz_ticket
+    where <include refid="createdInRange" />
+    group by status
+  </select>
+
+  <select id="avgHoursByPriority" resultType="com.novaops.backend.ops.dashboard.model.NamedCount">
+    select priority as name,
+           avg(timestampdiff(minute, created_at, done_at) / 60) as hours
+    from biz_ticket
+    where status = 'done'
+      and done_at is not null
+      and <include refid="createdInRange" />
+    group by priority
+  </select>
+</mapper>

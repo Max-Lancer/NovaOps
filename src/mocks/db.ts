@@ -1,7 +1,7 @@
 import type { RoleDto, UserListItemDto, UserProfile } from '@/types/auth'
 import type { MenuDataDto, MenuItemDto } from '@/types/menu'
 
-type MenuTemplateKey = 'full' | 'staff' | 'guest'
+type MenuTemplateKey = 'full' | 'staff' | 'member' | 'guest'
 
 interface MockUser {
   id: string
@@ -149,6 +149,9 @@ const permissionMap: Record<string, string[]> = {
     'kb:edit',
     'auth:user:manage',
     'agent:chat',
+    'agent:task',
+    'ticket:claim',
+    'ticket:claim:approve',
   ],
   staff: [
     'dashboard:view',
@@ -158,64 +161,82 @@ const permissionMap: Record<string, string[]> = {
     'ticket:transfer',
     'ticket:comment',
     'ticket:advance',
+    'ticket:claim:approve',
     'asset:view',
     'asset:claim',
     'agent:chat',
+    'agent:task',
   ],
-  guest: ['dashboard:view', 'agent:chat'],
-  member: ['dashboard:view', 'ticket:create', 'agent:chat'],
+  guest: ['agent:chat'],
+  member: ['ticket:create', 'ticket:claim', 'agent:chat'],
 }
 
-const menuTemplates: Record<MenuTemplateKey, MenuItemDto[]> = {
-  full: [
+const homeMenu = (id: string): MenuItemDto => ({
+  id,
+  title: '工作台',
+  name: 'Home',
+  path: '/home',
+  component: 'HomeView',
+  icon: 'home',
+  permission: 'agent:chat',
+  keepAlive: true,
+})
+
+const opsMenu = (id: string, includeAssets: boolean): MenuItemDto => ({
+  id,
+  title: '运维',
+  name: 'OpsRoot',
+  path: '/ops',
+  component: 'RouteView',
+  icon: 'ticket',
+  children: [
     {
-      id: 'dashboard',
-      title: 'Dashboard',
+      id: `${id}-dashboard`,
+      title: '运维看板',
       name: 'Dashboard',
-      path: '/dashboard',
+      path: '/ops/dashboard',
       component: 'DashboardView',
-      icon: 'dashboard',
       permission: 'dashboard:view',
       keepAlive: true,
     },
     {
-      id: 'ticket',
-      title: '工单',
-      name: 'TicketRoot',
-      path: '/ticket',
-      component: 'RouteView',
-      icon: 'ticket',
-      children: [
-        {
-          id: 'ticket-list',
-          title: '工单列表',
-          name: 'TicketList',
-          path: '/ticket/list',
-          component: 'TicketListView',
-          permission: 'ticket:view',
-          keepAlive: true,
-        },
-      ],
+      id: `${id}-tickets`,
+      title: '工单列表',
+      name: 'TicketList',
+      path: '/ops/ticket/list',
+      component: 'TicketListView',
+      permission: 'ticket:view',
+      keepAlive: true,
     },
-    {
-      id: 'asset',
-      title: '资产',
-      name: 'AssetRoot',
-      path: '/asset',
-      component: 'RouteView',
-      icon: 'asset',
-      children: [
-        {
-          id: 'asset-list',
+    ...(includeAssets
+      ? [{
+          id: `${id}-assets`,
           title: '资产列表',
           name: 'AssetList',
-          path: '/asset/list',
+          path: '/ops/asset/list',
           component: 'AssetListView',
           permission: 'asset:view',
           keepAlive: true,
-        },
-      ],
-    },
+        }]
+      : []),
+    ...(id === 'ops'
+      ? [{
+          id: `${id}-claim`,
+          title: '待接工单',
+          name: 'ClaimQueue',
+          path: '/ops/ticket/claim',
+          component: 'ClaimQueueView',
+          permission: 'ticket:claim',
+          keepAlive: true,
+        }]
+      : []),
+  ],
+})
+
+const menuTemplates: Record<MenuTemplateKey, MenuItemDto[]> = {
+  full: [
+    homeMenu('home'),
+    opsMenu('ops', true),
     {
       id: 'kb',
       title: '知识库',
@@ -235,51 +256,22 @@ const menuTemplates: Record<MenuTemplateKey, MenuItemDto[]> = {
         },
       ],
     },
+    { id: 'agent-console', title: '智能体工作台', name: 'AgentConsole', path: '/agent/console', component: 'AgentConsoleView', icon: 'robot', permission: 'agent:task', keepAlive: true },
+    { id: 'agent-tasks', title: '任务中心', name: 'AgentTasks', path: '/agent/tasks', component: 'AgentTasksView', icon: 'robot', permission: 'agent:task', keepAlive: true },
     { id: 'users', title: '用户与身份', name: 'UserManagement', path: '/system/users', component: 'UserManagementView', icon: 'user', permission: 'auth:user:manage', keepAlive: true },
   ],
   staff: [
-    {
-      id: 'dashboard',
-      title: 'Dashboard',
-      name: 'Dashboard',
-      path: '/dashboard',
-      component: 'DashboardView',
-      icon: 'dashboard',
-      permission: 'dashboard:view',
-      keepAlive: true,
-    },
-    {
-      id: 'ticket',
-      title: '工单',
-      name: 'TicketRoot',
-      path: '/ticket',
-      component: 'RouteView',
-      icon: 'ticket',
-      children: [
-        {
-          id: 'ticket-list',
-          title: '工单列表',
-          name: 'TicketList',
-          path: '/ticket/list',
-          component: 'TicketListView',
-          permission: 'ticket:view',
-          keepAlive: true,
-        },
-      ],
-    },
+    homeMenu('staff-home'),
+    opsMenu('staff-ops', true),
+    { id: 'staff-agent-console', title: '智能体工作台', name: 'AgentConsole', path: '/agent/console', component: 'AgentConsoleView', icon: 'robot', permission: 'agent:task', keepAlive: true },
+    { id: 'staff-agent-tasks', title: '任务中心', name: 'AgentTasks', path: '/agent/tasks', component: 'AgentTasksView', icon: 'robot', permission: 'agent:task', keepAlive: true },
   ],
-  guest: [
-    {
-      id: 'dashboard',
-      title: 'Dashboard',
-      name: 'Dashboard',
-      path: '/dashboard',
-      component: 'DashboardView',
-      icon: 'dashboard',
-      permission: 'dashboard:view',
-      keepAlive: true,
-    },
+  member: [
+    homeMenu('member-home'),
+    { id: 'member-claim', title: '待接工单', name: 'ClaimQueue', path: '/ops/ticket/claim', component: 'ClaimQueueView', icon: 'ticket', permission: 'ticket:claim', keepAlive: true },
+    { id: 'member-mine', title: '我的工单', name: 'MyTickets', path: '/ops/ticket/mine', component: 'MyTicketsView', icon: 'ticket', permission: 'ticket:claim', keepAlive: true },
   ],
+  guest: [homeMenu('guest-home')],
 }
 
 const accessTokenTable = new Map<string, SessionPayload>()
@@ -329,6 +321,9 @@ const resolveMenusByUser = (username: string): MenuItemDto[] => {
   const roleCode = user?.roles?.[0]
   if (roleCode === 'guest') {
     return cloneMenu(menuTemplates.guest)
+  }
+  if (roleCode === 'member') {
+    return cloneMenu(menuTemplates.member)
   }
   if (roleCode === 'staff') {
     return cloneMenu(menuTemplates.staff)

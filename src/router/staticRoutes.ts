@@ -13,23 +13,27 @@ export const staticRoutes: RouteRecordRaw[] = [
     path: '/',
     name: 'Root',
     component: () => import('@/layout/index.vue'),
-    redirect: '/dashboard',
+    redirect: '/home',
     meta: {
       requiresAuth: true,
     },
     children: [
+      { path: '/dashboard', redirect: '/home' },
+      { path: '/ticket/list', redirect: '/ops/ticket/list' },
+      { path: '/ticket/detail/:id', redirect: (to) => `/ops/ticket/detail/${String(to.params.id)}` },
+      { path: '/asset/list', redirect: '/ops/asset/list' },
+      { path: '/asset/detail/:id', redirect: (to) => `/ops/asset/detail/${String(to.params.id)}` },
       {
-        path: '/ticket/detail/:id',
+        path: '/ops/ticket/detail/:id',
         name: 'TicketDetail',
         component: () => import('@/views/ticket/detail.vue'),
         meta: {
           title: '工单详情',
-          permission: 'ticket:view',
           keepAlive: false,
         },
       },
       {
-        path: '/asset/detail/:id',
+        path: '/ops/asset/detail/:id',
         name: 'AssetDetail',
         component: () => import('@/views/asset/detail.vue'),
         meta: {

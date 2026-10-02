@@ -17,7 +17,6 @@ import type {
   TicketListQueryDto,
   UpdateTicketDto,
 } from '@/types/ticket'
-import type { DashboardMetricsQueryDto } from '@/types/dashboard'
 import type { KbChunkDto, KbDocumentDto, KbListQueryDto, SaveKbDto } from '@/types/kb'
 import {
   buildMenuData,
@@ -34,9 +33,6 @@ import {
   setMockUserStatus,
   verifyMockUser,
 } from './db'
-import {
-  buildDashboardMetrics,
-} from './dashboardDb'
 import {
   getKbDetail,
   getKbVersions,
@@ -59,6 +55,9 @@ import {
   listRelatedTicketsByAsset,
   listTicketComments,
   queryTickets,
+  queryClaimQueue,
+  queryMine,
+  buildTicketMetrics,
   updateTicket,
   uploadTicketAttachment,
 } from './ticketDb'
@@ -77,6 +76,26 @@ const fail = (code: number, message: string) => {
     message,
     data: null,
   })
+}
+
+const ticketActor = (username: string) => {
+  const user = getUser(username)
+  return {
+    permissions: buildUserProfile(username).permissions,
+    userId: user?.id || username,
+  }
+}
+
+const ACTION_PERMISSION: Record<string, string> = {
+  assign: 'ticket:assign',
+  transfer: 'ticket:transfer',
+  close: 'ticket:close',
+  advance: 'ticket:advance',
+  reject: 'ticket:reject',
+  approve: 'ticket:approve',
+  claim: 'ticket:claim',
+  approve_claim: 'ticket:claim:approve',
+  reject_claim: 'ticket:claim:approve',
 }
 
 const mockMode = (import.meta.env.VITE_ENABLE_MOCK || 'full').toLowerCase()
@@ -374,6 +393,26 @@ export const handlers = [
     return ok(queryTickets(query))
   }),
 
+  http.get('/api/tickets/claim-queue', async ({ request }) => {
+    if (shouldPassthroughTicketBackend) return passthrough()
+    const session = getSession(request)
+    if (!session) return fail(401, 'token 无效')
+    const permissions = buildUserProfile(session.username).permissions
+    if (!permissions.includes('ticket:claim')) return fail(403, '无权限执行该操作')
+    const url = new URL(request.url)
+    const user = getUser(session.username)
+    return ok(queryClaimQueue(user?.id || session.username, Number(url.searchParams.get('page') || 1), Number(url.searchParams.get('pageSize') || 50)))
+  }),
+
+  http.get('/api/tickets/mine', async ({ request }) => {
+    if (shouldPassthroughTicketBackend) return passthrough()
+    const session = getSession(request)
+    if (!session) return fail(401, 'token 无效')
+    const url = new URL(request.url)
+    const user = getUser(session.username)
+    return ok(queryMine(user?.id || session.username, Number(url.searchParams.get('page') || 1), Number(url.searchParams.get('pageSize') || 10)))
+  }),
+
   http.get('/api/tickets/:id', async ({ request, params }) => {
     if (shouldPassthroughTicketBackend) {
       return passthrough()
@@ -386,6 +425,10 @@ export const handlers = [
     const ticket = getTicketDetail(String(params.id))
     if (!ticket) {
       return fail(404, '工单不存在')
+    }
+    const actor = ticketActor(session.username)
+    if (!actor.permissions.includes('ticket:view') && ticket.assigneeId !== actor.userId) {
+      return fail(403, '无权限执行该操作')
     }
     return ok<TicketDetailDto>(ticket)
   }),
@@ -434,6 +477,16 @@ export const handlers = [
       return fail(401, 'token 无效')
     }
     const payload = (await request.json()) as TicketActionDto
+    const ticket = getTicketDetail(String(params.id))
+    if (!ticket) {
+      return fail(404, '工单不存在')
+    }
+    const actor = ticketActor(session.username)
+    const assigneeAdvance = payload.action === 'advance' && ticket.assigneeId === actor.userId
+    const required = ACTION_PERMISSION[payload.action]
+    if (!assigneeAdvance && (!required || !actor.permissions.includes(required))) {
+      return fail(403, '无权限执行该操作')
+    }
     try {
       const updated = actionTicket(String(params.id), session.username, payload)
       if (!updated) {
@@ -454,6 +507,14 @@ export const handlers = [
     if (!session) {
       return fail(401, 'token 无效')
     }
+    const ticket = getTicketDetail(String(params.id))
+    if (!ticket) {
+      return fail(404, '工单不存在')
+    }
+    const actor = ticketActor(session.username)
+    if (!actor.permissions.includes('ticket:view') && ticket.assigneeId !== actor.userId) {
+      return fail(403, '无权限执行该操作')
+    }
     const comments = listTicketComments(String(params.id))
     if (!comments) {
       return fail(404, '工单不存在')
@@ -473,6 +534,14 @@ export const handlers = [
     const payload = (await request.json()) as CreateCommentDto
     if (!payload.content?.trim()) {
       return fail(400, '评论内容不能为空')
+    }
+    const ticket = getTicketDetail(String(params.id))
+    if (!ticket) {
+      return fail(404, '工单不存在')
+    }
+    const actor = ticketActor(session.username)
+    if (!actor.permissions.includes('ticket:comment') && ticket.assigneeId !== actor.userId) {
+      return fail(403, '无权限执行该操作')
     }
     const created = createTicketComment(
       String(params.id),
@@ -499,6 +568,14 @@ export const handlers = [
     if (!(file instanceof File) || !file.name) {
       return fail(400, '附件不能为空')
     }
+    const ticket = getTicketDetail(String(params.id))
+    if (!ticket) {
+      return fail(404, '工单不存在')
+    }
+    const actor = ticketActor(session.username)
+    if (!actor.permissions.includes('ticket:comment') && ticket.assigneeId !== actor.userId) {
+      return fail(403, '无权限执行该操作')
+    }
     const attachment = uploadTicketAttachment(String(params.id), file.name, file.size)
     if (!attachment) {
       return fail(404, '工单不存在')
@@ -506,12 +583,21 @@ export const handlers = [
     return ok(attachment, '附件上传成功')
   }),
 
-  http.get('/api/tickets/:id/attachments/:attachmentId/download', async ({ request }) => {
+  http.get('/api/tickets/:id/attachments/:attachmentId/download', async ({ request, params }) => {
     if (shouldPassthroughTicketBackend) {
       return passthrough()
     }
-    if (!getSession(request)) {
+    const session = getSession(request)
+    if (!session) {
       return fail(401, 'token 无效')
+    }
+    const ticket = getTicketDetail(String(params.id))
+    if (!ticket) {
+      return fail(404, '工单不存在')
+    }
+    const actor = ticketActor(session.username)
+    if (!actor.permissions.includes('ticket:view') && ticket.assigneeId !== actor.userId) {
+      return fail(403, '无权限执行该操作')
     }
     return new HttpResponse(new Blob(['Mock 附件内容'], { type: 'application/octet-stream' }), {
       headers: { 'Content-Type': 'application/octet-stream' },
@@ -630,18 +716,23 @@ export const handlers = [
     }
   }),
 
-  http.get('/api/dashboard/metrics', async ({ request }) => {
+  http.get('/api/ops/dashboard/metrics', async ({ request }) => {
+    if (shouldPassthroughTicketBackend) return passthrough()
     await delay(220)
     const session = getSession(request)
     if (!session) {
       return fail(401, 'token 无效')
     }
-    const url = new URL(request.url)
-    const query: DashboardMetricsQueryDto = {
-      startDate: url.searchParams.get('startDate') || undefined,
-      endDate: url.searchParams.get('endDate') || undefined,
+    const permissions = buildUserProfile(session.username).permissions
+    if (!permissions.includes('dashboard:view')) {
+      return fail(403, '无权限执行该操作')
     }
-    return ok(buildDashboardMetrics(query.startDate, query.endDate))
+    const url = new URL(request.url)
+    try {
+      return ok(buildTicketMetrics(url.searchParams.get('startDate') || undefined, url.searchParams.get('endDate') || undefined))
+    } catch (error) {
+      return fail(400, (error as Error).message)
+    }
   }),
 
   http.get('/api/kb/documents', async ({ request }) => {

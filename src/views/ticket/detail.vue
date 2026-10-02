@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import { message } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/store/auth'
 import { getAssetBatchApi } from '@/api/asset'
 import { getUserOptionsApi } from '@/api/auth'
 import {
@@ -23,6 +24,7 @@ defineOptions({
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 const loading = ref(false)
 const actionLoading = ref(false)
 const commentLoading = ref(false)
@@ -46,6 +48,7 @@ const assigneeOptions = computed(() =>
 
 const statusTextMap: Record<TicketStatus, string> = {
   pending: '待处理',
+  claiming: '接单待审',
   processing: '处理中',
   review: '待复核',
   done: '已完成',
@@ -55,10 +58,17 @@ const flowSteps: TicketStatus[] = ['pending', 'processing', 'review', 'done']
 
 const allowedActionsByStatus: Record<TicketStatus, readonly TicketActionType[]> = {
   pending: ['assign'],
+  claiming: ['approve_claim', 'reject_claim'],
   processing: ['transfer', 'advance', 'close'],
   review: ['transfer', 'approve', 'reject', 'close'],
   done: [],
 }
+
+const isAssignee = computed(() => {
+  const userId = authStore.user?.id
+  return Boolean(userId && detail.value?.assigneeId === userId)
+})
+const lacksPermission = (code: string) => !authStore.permissions.includes(code)
 
 const isActionAvailable = (action: TicketActionType) => {
   if (!detail.value) {
@@ -185,12 +195,14 @@ watch(
 )
 
 onMounted(() => {
-  void Promise.all([
-    refreshDetail(),
-    getUserOptionsApi().then((users) => {
+  void refreshDetail()
+  void getUserOptionsApi()
+    .then((users) => {
       assigneeUsers.value = users
-    }),
-  ])
+    })
+    .catch(() => {
+      assigneeUsers.value = []
+    })
 })
 </script>
 
@@ -213,6 +225,28 @@ onMounted(() => {
               @click="doAction('assign')"
             >
               指派
+            </a-button>
+          </Permission>
+          <Permission code="ticket:claim:approve">
+            <a-button
+              v-if="isActionAvailable('approve_claim')"
+              size="small"
+              type="primary"
+              :loading="actionLoading"
+              @click="doAction('approve_claim')"
+            >
+              通过接单
+            </a-button>
+          </Permission>
+          <Permission code="ticket:claim:approve">
+            <a-button
+              v-if="isActionAvailable('reject_claim')"
+              size="small"
+              danger
+              :loading="actionLoading"
+              @click="doAction('reject_claim')"
+            >
+              驳回接单
             </a-button>
           </Permission>
           <Permission code="ticket:transfer">
@@ -246,6 +280,14 @@ onMounted(() => {
               提交复核
             </a-button>
           </Permission>
+          <a-button
+            v-if="isAssignee && lacksPermission('ticket:advance') && isActionAvailable('advance')"
+            size="small"
+            :loading="actionLoading"
+            @click="doAction('advance')"
+          >
+            提交复核
+          </a-button>
           <Permission code="ticket:approve">
             <a-button
               v-if="isActionAvailable('approve')"
@@ -284,6 +326,7 @@ onMounted(() => {
         </a-descriptions-item>
         <a-descriptions-item label="优先级">{{ detail?.priority }}</a-descriptions-item>
         <a-descriptions-item label="负责人">{{ detail?.assigneeName || '-' }}</a-descriptions-item>
+        <a-descriptions-item v-if="detail?.status === 'claiming'" label="接单申请人">{{ detail?.claimantName || '-' }}</a-descriptions-item>
         <a-descriptions-item label="创建人">{{ detail?.creatorName }}</a-descriptions-item>
         <a-descriptions-item label="更新时间">
           {{ detail?.updatedAt ? dayjs(detail.updatedAt).format('YYYY-MM-DD HH:mm:ss') : '-' }}
@@ -295,7 +338,7 @@ onMounted(() => {
               :key="asset.id"
               color="blue"
               class="asset-tag"
-              @click="router.push(`/asset/detail/${asset.id}`)"
+              @click="router.push(`/ops/asset/detail/${asset.id}`)"
             >
               {{ asset.id }} / {{ asset.name }}
             </a-tag>
@@ -362,6 +405,14 @@ onMounted(() => {
               <a-button type="primary" :loading="commentLoading" @click="submitComment">发表评论</a-button>
             </a-space>
           </Permission>
+          <a-space
+            v-if="isAssignee && lacksPermission('ticket:comment')"
+            direction="vertical"
+            style="width: 100%; margin-top: 12px"
+          >
+            <a-textarea v-model:value="newComment" :rows="3" placeholder="输入评论..." />
+            <a-button type="primary" :loading="commentLoading" @click="submitComment">发表评论</a-button>
+          </a-space>
         </a-card>
       </a-col>
 
@@ -372,6 +423,13 @@ onMounted(() => {
               <a-button type="dashed">上传附件</a-button>
             </a-upload>
           </Permission>
+          <a-upload
+            v-if="isAssignee && lacksPermission('ticket:comment')"
+            :show-upload-list="false"
+            :custom-request="handleUpload"
+          >
+            <a-button type="dashed">上传附件</a-button>
+          </a-upload>
           <a-list :data-source="detail?.attachments || []" size="small" class="mt12">
             <template #renderItem="{ item }">
               <a-list-item>

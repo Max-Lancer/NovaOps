@@ -12,11 +12,12 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @MapperScan(basePackages = {
     "com.novaops.backend.auth.mapper",
-    "com.novaops.backend.ticket.mapper",
+    "com.novaops.backend.ops.ticket.mapper",
     "com.novaops.backend.kb.mapper",
     "com.novaops.backend.agent.mapper",
     "com.novaops.backend.agent.task.mapper",
-    "com.novaops.backend.asset.mapper"
+    "com.novaops.backend.ops.asset.mapper",
+    "com.novaops.backend.ops.dashboard.mapper"
 })
 @EnableConfigurationProperties({SecurityProperties.class, McpRemoteProperties.class})
 @EnableAsync

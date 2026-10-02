@@ -1,8 +1,17 @@
-export type TicketStatus = 'pending' | 'processing' | 'review' | 'done'
+export type TicketStatus = 'pending' | 'claiming' | 'processing' | 'review' | 'done'
 
 export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent'
 
-export type TicketActionType = 'assign' | 'close' | 'reject' | 'transfer' | 'advance' | 'approve'
+export type TicketActionType =
+  | 'assign'
+  | 'close'
+  | 'reject'
+  | 'transfer'
+  | 'advance'
+  | 'approve'
+  | 'claim'
+  | 'approve_claim'
+  | 'reject_claim'
 
 export interface TicketAttachmentDto {
   id: string
@@ -38,6 +47,8 @@ export interface TicketListItemDto {
   priority: TicketPriority
   assigneeId?: string
   assigneeName?: string
+  claimantId?: string
+  claimantName?: string
   creatorId: string
   creatorName: string
   createdAt: string

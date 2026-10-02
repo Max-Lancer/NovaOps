@@ -82,6 +82,7 @@ const assignForm = reactive({
 
 const statusTextMap: Record<TicketStatus, string> = {
   pending: '待处理',
+  claiming: '接单待审',
   processing: '处理中',
   review: '待复核',
   done: '已完成',
@@ -207,7 +208,7 @@ const resetFilters = async () => {
 }
 
 const goDetail = (id: string) => {
-  void router.push(`/ticket/detail/${id}`)
+  void router.push(`/ops/ticket/detail/${id}`)
 }
 
 const handlePageChange = async (value: number) => {
@@ -410,6 +411,7 @@ onMounted(() => {
                   style="width: 100%;"
                   :options="[
                     { label: '待处理', value: 'pending' },
+                    { label: '接单待审', value: 'claiming' },
                     { label: '处理中', value: 'processing' },
                     { label: '待复核', value: 'review' },
                     { label: '已完成', value: 'done' },
