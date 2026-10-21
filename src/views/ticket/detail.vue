@@ -349,9 +349,10 @@ onMounted(() => {
       </a-descriptions>
     </a-card>
 
-    <a-row :gutter="12">
-      <a-col :span="14">
-        <a-card title="流转记录" :bordered="false">
+    <div class="detail-panels">
+      <div class="panel-slot">
+      <a-card class="panel-card" title="流转记录" :bordered="false">
+        <div class="panel-scroll">
           <a-timeline>
             <a-timeline-item v-for="item in detail?.timeline || []" :key="item.id">
               <div class="timeline-title">
@@ -365,29 +366,30 @@ onMounted(() => {
               <div v-if="item.remark">备注：{{ item.remark }}</div>
             </a-timeline-item>
           </a-timeline>
-        </a-card>
-      </a-col>
-      <a-col :span="10">
-        <a-card title="状态操作" :bordered="false">
-          <a-form layout="vertical">
-            <a-form-item label="指派 / 转派给">
-              <a-select
-                v-model:value="actionForm.assigneeId"
-                allow-clear
-                :options="assigneeOptions"
-              />
-            </a-form-item>
-            <a-form-item label="备注">
-              <a-textarea v-model:value="actionForm.remark" :rows="3" placeholder="填写 reject/transfer 说明" />
-            </a-form-item>
-          </a-form>
-        </a-card>
-      </a-col>
-    </a-row>
+        </div>
+      </a-card>
+      </div>
 
-    <a-row :gutter="12">
-      <a-col :span="12">
-        <a-card title="评论" :bordered="false">
+      <div class="panel-slot">
+      <a-card class="panel-card" title="状态操作" :bordered="false">
+        <a-form layout="vertical">
+          <a-form-item label="指派 / 转派给">
+            <a-select
+              v-model:value="actionForm.assigneeId"
+              allow-clear
+              :options="assigneeOptions"
+            />
+          </a-form-item>
+          <a-form-item label="备注">
+            <a-textarea v-model:value="actionForm.remark" :rows="3" placeholder="填写 reject/transfer 说明" />
+          </a-form-item>
+        </a-form>
+      </a-card>
+      </div>
+
+      <div class="panel-slot">
+      <a-card class="panel-card" title="评论" :bordered="false">
+        <div class="panel-scroll">
           <a-list :data-source="comments" size="small">
             <template #renderItem="{ item }">
               <a-list-item>
@@ -399,8 +401,10 @@ onMounted(() => {
               </a-list-item>
             </template>
           </a-list>
+        </div>
+        <div class="panel-footer">
           <Permission code="ticket:comment">
-            <a-space direction="vertical" style="width: 100%; margin-top: 12px">
+            <a-space direction="vertical" style="width: 100%">
               <a-textarea v-model:value="newComment" :rows="3" placeholder="输入评论..." />
               <a-button type="primary" :loading="commentLoading" @click="submitComment">发表评论</a-button>
             </a-space>
@@ -408,16 +412,18 @@ onMounted(() => {
           <a-space
             v-if="isAssignee && lacksPermission('ticket:comment')"
             direction="vertical"
-            style="width: 100%; margin-top: 12px"
+            style="width: 100%"
           >
             <a-textarea v-model:value="newComment" :rows="3" placeholder="输入评论..." />
             <a-button type="primary" :loading="commentLoading" @click="submitComment">发表评论</a-button>
           </a-space>
-        </a-card>
-      </a-col>
+        </div>
+      </a-card>
+      </div>
 
-      <a-col :span="12">
-        <a-card title="附件" :bordered="false">
+      <div class="panel-slot">
+      <a-card class="panel-card" title="附件" :bordered="false">
+        <div class="panel-toolbar">
           <Permission code="ticket:comment">
             <a-upload :show-upload-list="false" :custom-request="handleUpload">
               <a-button type="dashed">上传附件</a-button>
@@ -430,7 +436,9 @@ onMounted(() => {
           >
             <a-button type="dashed">上传附件</a-button>
           </a-upload>
-          <a-list :data-source="detail?.attachments || []" size="small" class="mt12">
+        </div>
+        <div class="panel-scroll">
+          <a-list :data-source="detail?.attachments || []" size="small">
             <template #renderItem="{ item }">
               <a-list-item>
                 <a @click="downloadAttachment(item as TicketAttachmentDto)">{{ item.name }}</a>
@@ -438,9 +446,10 @@ onMounted(() => {
               </a-list-item>
             </template>
           </a-list>
-        </a-card>
-      </a-col>
-    </a-row>
+        </div>
+      </a-card>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -448,14 +457,82 @@ onMounted(() => {
 .ticket-detail-page {
   display: grid;
   gap: 12px;
+  min-width: 0;
+}
+
+.detail-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-auto-rows: 420px;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.panel-slot {
+  height: 420px;
+  max-height: 420px;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-card {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-card :deep(.ant-card-head) {
+  flex: none;
+}
+
+.panel-card :deep(.ant-card-body) {
+  flex: 1 1 0;
+  height: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-scroll {
+  flex: 1 1 0;
+  height: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.panel-toolbar,
+.panel-footer {
+  flex: none;
+}
+
+.panel-toolbar {
+  margin-bottom: 12px;
+}
+
+.panel-footer {
+  margin-top: 12px;
 }
 
 .mb16 {
   margin-bottom: 16px;
 }
 
-.mt12 {
-  margin-top: 12px;
+@media (max-width: 991px) {
+  .detail-panels {
+    grid-template-columns: 1fr;
+  }
 }
 
 .timeline-title {
