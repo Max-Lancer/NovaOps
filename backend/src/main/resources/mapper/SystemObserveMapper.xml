@@ -12,10 +12,12 @@
     )
   </insert>
 
+  <!-- 按批次取最近一次，不把 checked_at 当成批次唯一键（同一毫秒内仍可能并列） -->
   <select id="findLatestBatchId" resultType="string">
     select batch_id
     from sys_module_check
-    order by checked_at desc
+    group by batch_id
+    order by max(checked_at) desc
     limit 1
   </select>
 
@@ -29,7 +31,7 @@
   <select id="listRecentChecks" resultType="com.novaops.backend.system.model.ModuleCheckRecord">
     select id, batch_id, module_code, module_name, status, latency_ms, message, checked_at
     from sys_module_check
-    order by checked_at desc
+    order by checked_at desc, batch_id asc, module_code asc
     limit #{limit}
   </select>
 
@@ -63,6 +65,9 @@
     </if>
     <if test="httpStatus != null">
       and http_status = #{httpStatus}
+    </if>
+    <if test="resultCode != null">
+      and result_code = #{resultCode}
     </if>
     <if test="startDate != null">
       and created_at <![CDATA[>=]]> #{startDate}

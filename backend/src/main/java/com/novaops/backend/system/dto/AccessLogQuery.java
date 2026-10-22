@@ -15,6 +15,8 @@ public class AccessLogQuery {
   private String keyword;
   private String method;
   private Integer httpStatus;
+  /** 业务结果码。项目约定多数接口 HTTP 仍是 200，成败看响应体 code。 */
+  private Integer resultCode;
   private String startDate;
   private String endDate;
 
@@ -56,6 +58,14 @@ public class AccessLogQuery {
 
   public void setHttpStatus(Integer httpStatus) {
     this.httpStatus = httpStatus;
+  }
+
+  public Integer getResultCode() {
+    return resultCode;
+  }
+
+  public void setResultCode(Integer resultCode) {
+    this.resultCode = resultCode;
   }
 
   public String getStartDate() {

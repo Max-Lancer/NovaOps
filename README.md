@@ -139,7 +139,10 @@ mysql -uroot -p novaops < backend/sql/novaops_init.sql
 ```bash
 mysql -uroot -p novaops < backend/sql/refactor_rag_migration.sql
 mysql -uroot -p novaops < backend/sql/add_agent_chat_execution_audit.sql
+mysql -uroot -p novaops < backend/sql/migration_system_observe.sql
 ```
+
+**已有数据库在使用「系统详情」（运行概览、运行日志）之前，必须先执行 `backend/sql/migration_system_observe.sql`。** 未执行时，相关接口会因缺少 `system:observe` 权限以及 `sys_module_check`、`sys_access_log` 表而失败。该脚本可重复执行。全新库只导入 `novaops_init.sql` 即可，其中已包含同等表结构（模块检查时间 `checked_at` 为毫秒精度 `datetime(3)`）。Docker 的 MySQL 数据卷若在该功能加入之前已经初始化，`docker compose up` 不会改旧卷，同样需要手工执行这份迁移。撤回用 `backend/sql/rollback_system_observe.sql`。
 
 #### 2. 启动 Qdrant
 

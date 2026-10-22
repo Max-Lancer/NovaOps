@@ -24,6 +24,7 @@ public interface SystemObserveMapper {
       @Param("keyword") String keyword,
       @Param("method") String method,
       @Param("httpStatus") Integer httpStatus,
+      @Param("resultCode") Integer resultCode,
       @Param("startDate") LocalDateTime startDate,
       @Param("endDate") LocalDateTime endDate
   );
@@ -32,15 +33,16 @@ public interface SystemObserveMapper {
       @Param("keyword") String keyword,
       @Param("method") String method,
       @Param("httpStatus") Integer httpStatus,
+      @Param("resultCode") Integer resultCode,
       @Param("startDate") LocalDateTime startDate,
       @Param("endDate") LocalDateTime endDate,
       @Param("offset") long offset,
       @Param("limit") long limit
   );
 
-  void deleteAccessLogsBefore(@Param("cutoff") LocalDateTime cutoff);
+  int deleteAccessLogsBefore(@Param("cutoff") LocalDateTime cutoff);
 
   long countAllAccessLogs();
 
-  void deleteOldestAccessLogs(@Param("limit") int limit);
+  int deleteOldestAccessLogs(@Param("limit") int limit);
 }

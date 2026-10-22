@@ -80,19 +80,29 @@ const renderCharts = () => {
     series: [{ type: 'bar', data: data.latest.map((item) => item.latencyMs), itemStyle: { color: colors.primary }, barMaxWidth: 42 }],
   })
   const modules = [...new Set(data.history.map((item) => item.moduleName))]
-  const times = [...new Set(data.history.map((item) => item.checkedAt))]
+  // 同一秒内连续检查的 checkedAt 可能相同，按 batchId 分点，避免两条检查并成一个点
+  const batches: { batchId: string; checkedAt: string }[] = []
+  const seenBatches = new Set<string>()
+  for (const item of data.history) {
+    if (seenBatches.has(item.batchId)) {
+      continue
+    }
+    seenBatches.add(item.batchId)
+    batches.push({ batchId: item.batchId, checkedAt: item.checkedAt })
+  }
+  batches.sort((left, right) => dayjs(left.checkedAt).valueOf() - dayjs(right.checkedAt).valueOf())
   lineChart.value?.setOption({
     textStyle: { color: colors.text },
     tooltip: { trigger: 'axis' },
     legend: { top: 0, textStyle: { color: colors.secondary } },
     grid: { left: 48, right: 16, top: 36, bottom: 32 },
-    xAxis: { type: 'category', data: times.map((time) => dayjs(time).format('MM-DD HH:mm')), axisLabel: { color: colors.secondary } },
+    xAxis: { type: 'category', data: batches.map((batch) => dayjs(batch.checkedAt).format('MM-DD HH:mm:ss')), axisLabel: { color: colors.secondary } },
     yAxis: { type: 'value', name: 'ms', axisLabel: { color: colors.secondary }, splitLine: { lineStyle: { color: colors.border } } },
     series: modules.map((name) => ({
       name,
       type: 'line',
       smooth: true,
-      data: times.map((time) => data.history.find((item) => item.moduleName === name && item.checkedAt === time)?.latencyMs ?? null),
+      data: batches.map((batch) => data.history.find((item) => item.moduleName === name && item.batchId === batch.batchId)?.latencyMs ?? null),
     })),
   })
 }
@@ -148,7 +158,8 @@ onBeforeUnmount(() => {
       <div class="head">
         <div>
           <h2>系统运行概览</h2>
-          <p>最近检查：{{ checkedAt ? dayjs(checkedAt).format('YYYY-MM-DD HH:mm:ss') : '-' }}</p>
+          <p>最近检查：{{ checkedAt ? dayjs(checkedAt).format('YYYY-MM-DD HH:mm:ss.SSS') : '-' }}</p>
+          <p class="hint">工单、资产的「正常」表示数据可查询。知识库里的 Qdrant、智能体的模型网关「正常」只表示地址可达（收到 HTTP 响应即算，含 401/403），不代表密钥鉴权已经通过。</p>
         </div>
         <a-button type="primary" :icon="h(ReloadOutlined)" :loading="checking" @click="loadHealth(true)">重新检查</a-button>
       </div>
@@ -178,6 +189,8 @@ onBeforeUnmount(() => {
 .head, .module-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .head h2, .module-title, p { margin: 0; }
 .head p, .system-overview :deep(.ant-card p) { color: var(--nova-text-secondary); }
+.head { align-items: flex-start; }
+.head .hint { margin-top: 6px; max-width: 720px; }
 .module-title { margin-bottom: 8px; font-weight: 600; }
 .latency { margin: 8px 0; font-size: 20px; font-weight: 650; }
 .chart { width: 100%; height: 280px; }

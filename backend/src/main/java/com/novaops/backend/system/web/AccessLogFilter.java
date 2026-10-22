@@ -70,6 +70,7 @@ public class AccessLogFilter extends OncePerRequestFilter {
       record.setResultMessage(message instanceof String value ? value : null);
       Object exceptionType = request.getAttribute(RequestAttributes.EXCEPTION_TYPE);
       record.setExceptionType(exceptionType instanceof String value ? value : null);
+      // 异步入队。这里只兜住提交失败；插入与清理都不在请求线程上执行。
       accessLogService.record(record);
     } catch (Exception exception) {
       log.warn("write access log failed", exception);

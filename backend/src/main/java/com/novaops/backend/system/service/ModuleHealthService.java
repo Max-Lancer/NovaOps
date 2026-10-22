@@ -122,7 +122,7 @@ public class ModuleHealthService {
     if (qdrantMessage != null) {
       return new ProbeResult("kb", "知识库", "degraded", elapsed(started), "文档库可用，Qdrant 不可用：" + qdrantMessage);
     }
-    return new ProbeResult("kb", "知识库", "up", elapsed(started), "文档库与向量库可访问");
+    return new ProbeResult("kb", "知识库", "up", elapsed(started), "文档库可用，Qdrant 地址可达（未校验鉴权）");
   }
 
   private ProbeResult probeAgent() {
@@ -133,15 +133,15 @@ public class ModuleHealthService {
       return new ProbeResult("agent", "智能体工作台", "degraded", elapsed(started), "模型密钥未配置，且网关不可达");
     }
     if (!configured) {
-      return new ProbeResult("agent", "智能体工作台", "degraded", elapsed(started), "模型密钥未配置，网关地址可访问");
+      return new ProbeResult("agent", "智能体工作台", "degraded", elapsed(started), "模型密钥未配置；网关地址可达（未校验鉴权）");
     }
     if (failure != null) {
       return new ProbeResult("agent", "智能体工作台", "down", elapsed(started), "模型网关不可达：" + failure);
     }
-    return new ProbeResult("agent", "智能体工作台", "up", elapsed(started), "模型网关可访问");
+    return new ProbeResult("agent", "智能体工作台", "up", elapsed(started), "模型网关地址可达（未校验鉴权）");
   }
 
-  /** 返回 null 表示地址有 HTTP 响应；返回说明表示连接失败。 */
+  /** 返回 null 表示地址有 HTTP 响应（含 401/403，只说明可达，不代表鉴权通过）；返回说明表示连接失败。 */
   private String probeHttp(String url, String apiKey) {
     try {
       SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();

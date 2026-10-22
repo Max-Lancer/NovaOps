@@ -297,6 +297,7 @@ create table biz_asset (
   index idx_asset_owner (owner_id)
 );
 
+-- checked_at 用毫秒精度。趋势按 batch_id 聚合，不把这一列当成批次唯一键。
 create table sys_module_check (
   id varchar(64) primary key,
   batch_id varchar(64) not null,
@@ -305,7 +306,7 @@ create table sys_module_check (
   status varchar(16) not null,
   latency_ms int not null,
   message varchar(500) not null,
-  checked_at datetime not null,
+  checked_at datetime(3) not null,
   index idx_module_check_time (checked_at),
   index idx_module_check_batch (batch_id)
 );

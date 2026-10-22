@@ -35,6 +35,7 @@ export interface AccessLogQueryDto {
   keyword?: string
   method?: string
   httpStatus?: number
+  resultCode?: number
   startDate?: string
   endDate?: string
 }

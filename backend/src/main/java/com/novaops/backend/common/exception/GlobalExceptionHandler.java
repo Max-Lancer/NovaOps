@@ -26,7 +26,9 @@ public class GlobalExceptionHandler {
   }
 
   @ExceptionHandler(MethodArgumentNotValidException.class)
-  public ResponseEntity<ApiResponse<Object>> handleValidationException(MethodArgumentNotValidException exception) {
+  public ResponseEntity<ApiResponse<Object>> handleValidationException(
+      MethodArgumentNotValidException exception, HttpServletRequest request) {
+    request.setAttribute(RequestAttributes.EXCEPTION_TYPE, exception.getClass().getSimpleName());
     String message = exception.getBindingResult().getFieldErrors().stream()
         .map(FieldError::getDefaultMessage)
         .collect(Collectors.joining("；"));
@@ -35,7 +37,9 @@ public class GlobalExceptionHandler {
 
   // @ModelAttribute + @Valid 的 query 参数校验失败走 BindException（如分页超上限）
   @ExceptionHandler(org.springframework.validation.BindException.class)
-  public ResponseEntity<ApiResponse<Object>> handleBindException(org.springframework.validation.BindException exception) {
+  public ResponseEntity<ApiResponse<Object>> handleBindException(
+      org.springframework.validation.BindException exception, HttpServletRequest request) {
+    request.setAttribute(RequestAttributes.EXCEPTION_TYPE, exception.getClass().getSimpleName());
     String message = exception.getFieldErrors().stream()
         .map(FieldError::getDefaultMessage)
         .collect(Collectors.joining("；"));
@@ -43,12 +47,16 @@ public class GlobalExceptionHandler {
   }
 
   @ExceptionHandler(ConstraintViolationException.class)
-  public ResponseEntity<ApiResponse<Object>> handleConstraintViolation(ConstraintViolationException exception) {
+  public ResponseEntity<ApiResponse<Object>> handleConstraintViolation(
+      ConstraintViolationException exception, HttpServletRequest request) {
+    request.setAttribute(RequestAttributes.EXCEPTION_TYPE, exception.getClass().getSimpleName());
     return ResponseEntity.ok(ApiResponse.failure(400, exception.getMessage()));
   }
 
   @ExceptionHandler(MaxUploadSizeExceededException.class)
-  public ResponseEntity<ApiResponse<Object>> handleUploadTooLarge(MaxUploadSizeExceededException exception) {
+  public ResponseEntity<ApiResponse<Object>> handleUploadTooLarge(
+      MaxUploadSizeExceededException exception, HttpServletRequest request) {
+    request.setAttribute(RequestAttributes.EXCEPTION_TYPE, exception.getClass().getSimpleName());
     return ResponseEntity.ok(ApiResponse.failure(400, "上传文件超过允许的大小上限"));
   }
 
