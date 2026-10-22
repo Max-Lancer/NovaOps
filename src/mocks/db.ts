@@ -78,7 +78,7 @@ const users: Record<string, MockUser> = {
 const dynamicUsers = new Map<string, MockUser>()
 
 export const roles: RoleDto[] = [
-  { id: 'role-admin', code: 'admin', name: '管理员', description: '管理用户、身份、知识库以及全部业务数据', permissions: ['auth:user:manage', 'dashboard:view', 'ticket:view', 'asset:view', 'kb:view', 'kb:edit', 'agent:chat'] },
+  { id: 'role-admin', code: 'admin', name: '管理员', description: '管理用户、身份、知识库以及全部业务数据', permissions: ['auth:user:manage', 'dashboard:view', 'ticket:view', 'asset:view', 'kb:view', 'kb:edit', 'agent:chat', 'system:observe'] },
   { id: 'role-staff', code: 'staff', name: '运维人员', description: '处理工单、资产与使用智能问答', permissions: ['dashboard:view', 'ticket:view', 'ticket:create', 'asset:view', 'agent:chat'] },
   { id: 'role-guest', code: 'guest', name: '访客', description: '只读访问授权看板与智能问答', permissions: ['dashboard:view', 'agent:chat'] },
   { id: 'role-member', code: 'member', name: '普通成员', description: '注册用户默认身份：只读看板、提交工单与智能问答', permissions: ['dashboard:view', 'ticket:create', 'agent:chat'] },
@@ -152,6 +152,7 @@ const permissionMap: Record<string, string[]> = {
     'agent:task',
     'ticket:claim',
     'ticket:claim:approve',
+    'system:observe',
   ],
   staff: [
     'dashboard:view',
@@ -259,6 +260,34 @@ const menuTemplates: Record<MenuTemplateKey, MenuItemDto[]> = {
     { id: 'agent-console', title: '智能体工作台', name: 'AgentConsole', path: '/agent/console', component: 'AgentConsoleView', icon: 'robot', permission: 'agent:task', keepAlive: true },
     { id: 'agent-tasks', title: '任务中心', name: 'AgentTasks', path: '/agent/tasks', component: 'AgentTasksView', icon: 'robot', permission: 'agent:task', keepAlive: true },
     { id: 'users', title: '用户与身份', name: 'UserManagement', path: '/system/users', component: 'UserManagementView', icon: 'user', permission: 'auth:user:manage', keepAlive: true },
+    {
+      id: 'system',
+      title: '系统详情',
+      name: 'SystemRoot',
+      path: '/system/observe',
+      component: 'RouteView',
+      icon: 'monitor',
+      children: [
+        {
+          id: 'system-overview',
+          title: '运行概览',
+          name: 'SystemOverview',
+          path: '/system/overview',
+          component: 'SystemOverviewView',
+          permission: 'system:observe',
+          keepAlive: true,
+        },
+        {
+          id: 'system-logs',
+          title: '运行日志',
+          name: 'SystemLogs',
+          path: '/system/logs',
+          component: 'SystemLogsView',
+          permission: 'system:observe',
+          keepAlive: true,
+        },
+      ],
+    },
   ],
   staff: [
     homeMenu('staff-home'),

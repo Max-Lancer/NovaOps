@@ -78,6 +78,24 @@ const fail = (code: number, message: string) => {
   })
 }
 
+const mockSystemHealth = (fresh = false) => {
+  const checkedAt = new Date().toISOString()
+  const previousAt = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  const build = (at: string, latencyOffset: number) => [
+    { batchId: fresh ? 'chk-new' : 'chk-last', moduleCode: 'ticket', moduleName: '工单', status: 'up', latencyMs: 12 + latencyOffset, message: '工单数据可查询', checkedAt: at },
+    { batchId: fresh ? 'chk-new' : 'chk-last', moduleCode: 'asset', moduleName: '资产', status: 'up', latencyMs: 15 + latencyOffset, message: '资产数据可查询', checkedAt: at },
+    { batchId: fresh ? 'chk-new' : 'chk-last', moduleCode: 'kb', moduleName: '知识库', status: 'degraded', latencyMs: 40 + latencyOffset, message: '文档库可用，Qdrant 不可用', checkedAt: at },
+    { batchId: fresh ? 'chk-new' : 'chk-last', moduleCode: 'agent', moduleName: '智能体工作台', status: 'up', latencyMs: 28 + latencyOffset, message: '模型网关可访问', checkedAt: at },
+  ]
+  const latest = build(checkedAt, fresh ? 1 : 0)
+  return { latest, history: [...build(previousAt, 8), ...latest] }
+}
+
+const mockSystemLogs = () => [
+  { id: 'log-1', requestId: 'req-mock-1', method: 'GET', path: '/api/tickets', httpStatus: 200, resultCode: 0, resultMessage: 'ok', durationMs: 36, username: 'admin', createdAt: new Date().toISOString() },
+  { id: 'log-2', requestId: 'req-mock-2', method: 'POST', path: '/api/tickets/A-TICKET-0001/actions', httpStatus: 200, resultCode: 0, resultMessage: '工单流转成功', durationMs: 58, username: 'admin', createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString() },
+]
+
 const ticketActor = (username: string) => {
   const user = getUser(username)
   return {
@@ -842,5 +860,36 @@ export const handlers = [
       return fail(400, '标题和正文不能为空')
     }
     return ok(saveKb(session.username, payload), '保存成功')
+  }),
+
+  http.get('/api/system/health', async ({ request }) => {
+    if (shouldPassthroughTicketBackend) return passthrough()
+    await delay(120)
+    const session = getSession(request)
+    if (!session) return fail(401, 'token 无效')
+    if (!buildUserProfile(session.username).permissions.includes('system:observe')) return fail(403, '无权限执行该操作')
+    return ok(mockSystemHealth())
+  }),
+
+  http.post('/api/system/health/check', async ({ request }) => {
+    if (shouldPassthroughTicketBackend) return passthrough()
+    await delay(180)
+    const session = getSession(request)
+    if (!session) return fail(401, 'token 无效')
+    if (!buildUserProfile(session.username).permissions.includes('system:observe')) return fail(403, '无权限执行该操作')
+    return ok(mockSystemHealth(true), '检查完成')
+  }),
+
+  http.get('/api/system/logs', async ({ request }) => {
+    if (shouldPassthroughTicketBackend) return passthrough()
+    await delay(120)
+    const session = getSession(request)
+    if (!session) return fail(401, 'token 无效')
+    if (!buildUserProfile(session.username).permissions.includes('system:observe')) return fail(403, '无权限执行该操作')
+    const url = new URL(request.url)
+    const page = Number(url.searchParams.get('page') || 1)
+    const pageSize = Number(url.searchParams.get('pageSize') || 10)
+    const list = mockSystemLogs().slice((page - 1) * pageSize, page * pageSize)
+    return ok({ list, page, pageSize, total: mockSystemLogs().length })
   }),
 ]

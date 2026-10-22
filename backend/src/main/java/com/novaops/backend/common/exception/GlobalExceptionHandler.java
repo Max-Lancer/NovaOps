@@ -1,6 +1,8 @@
 package com.novaops.backend.common.exception;
 
 import com.novaops.backend.common.api.ApiResponse;
+import com.novaops.backend.common.web.RequestAttributes;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -18,7 +20,8 @@ public class GlobalExceptionHandler {
   private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
   @ExceptionHandler(BusinessException.class)
-  public ResponseEntity<ApiResponse<Object>> handleBusinessException(BusinessException exception) {
+  public ResponseEntity<ApiResponse<Object>> handleBusinessException(BusinessException exception, HttpServletRequest request) {
+    request.setAttribute(RequestAttributes.EXCEPTION_TYPE, exception.getClass().getSimpleName());
     return ResponseEntity.ok(ApiResponse.failure(exception.getCode(), exception.getMessage()));
   }
 
@@ -50,8 +53,9 @@ public class GlobalExceptionHandler {
   }
 
   @ExceptionHandler(Exception.class)
-  public ResponseEntity<ApiResponse<Object>> handleException(Exception exception) {
+  public ResponseEntity<ApiResponse<Object>> handleException(Exception exception, HttpServletRequest request) {
     // 未知异常必须留堆栈，否则线上问题无法排查；响应契约保持 HTTP 200 + body code
+    request.setAttribute(RequestAttributes.EXCEPTION_TYPE, exception.getClass().getSimpleName());
     log.error("unhandled exception", exception);
     return ResponseEntity.ok(ApiResponse.failure(500, "服务异常，请稍后重试"));
   }

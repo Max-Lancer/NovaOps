@@ -69,6 +69,24 @@ const getRequestId = (config: RequestConfig) => {
   return config.requestId || `${method}:${url}:${Date.now()}:${requestSequence++}`
 }
 
+const setHeader = (config: RequestConfig, name: string, value: string) => {
+  if (config.headers instanceof AxiosHeaders) {
+    config.headers.set(name, value)
+    return
+  }
+  config.headers = {
+    ...config.headers,
+    [name]: value,
+  }
+}
+
+const createTraceId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `req_${Date.now()}_${requestSequence}`
+}
+
 //请求完成后，无论失败/成功，都不再需要controller去取消请求
 const clearControllerByConfig = (config: RequestConfig) => {
   if (config.requestId) {
@@ -170,6 +188,7 @@ const onRequest = (config: InternalAxiosRequestConfig) => {
     //设置授权头
     setAuthorizationHeader(requestConfig, accessToken)
   }
+  setHeader(requestConfig, 'X-Request-Id', createTraceId())
 
   //给没有取消能力的请求，补上一个 AbortController
   if (!requestConfig.signal) {

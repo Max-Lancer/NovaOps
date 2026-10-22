@@ -19,6 +19,8 @@ const routeComponentMap: Record<string, RouteComponentLoader> = {
   AgentConsoleView: () => import('@/views/agent/console.vue'),
   AgentTasksView: () => import('@/views/agent/tasks.vue'),
   UserManagementView: () => import('@/views/system/users.vue'),
+  SystemOverviewView: () => import('@/views/system/overview.vue'),
+  SystemLogsView: () => import('@/views/system/logs.vue'),
 }
 
 //后端菜单数据里，有子菜单的父级节点 component 字段存的是 'RouteView'，
