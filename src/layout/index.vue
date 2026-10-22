@@ -13,6 +13,7 @@ import {
   MenuUnfoldOutlined,
   ToolOutlined,
   TeamOutlined,
+  MonitorOutlined,
 } from '@ant-design/icons-vue'
 import { useAppStore } from '@/store/app'
 import { useAuthStore } from '@/store/auth'
@@ -41,6 +42,7 @@ const iconMap = {
   asset: DesktopOutlined,
   kb: BookOutlined,
   user: TeamOutlined,
+  monitor: MonitorOutlined,
   default: AppstoreOutlined,
 }
 

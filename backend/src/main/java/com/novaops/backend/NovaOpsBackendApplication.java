@@ -17,7 +17,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
     "com.novaops.backend.agent.mapper",
     "com.novaops.backend.agent.task.mapper",
     "com.novaops.backend.ops.asset.mapper",
-    "com.novaops.backend.ops.dashboard.mapper"
+    "com.novaops.backend.ops.dashboard.mapper",
+    "com.novaops.backend.system.mapper"
 })
 @EnableConfigurationProperties({SecurityProperties.class, McpRemoteProperties.class})
 @EnableAsync

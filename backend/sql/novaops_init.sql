@@ -1,4 +1,6 @@
 SET NAMES utf8mb4;
+drop table if exists sys_access_log;
+drop table if exists sys_module_check;
 drop table if exists biz_ticket_attachment;
 drop table if exists kb_upload_chunk;
 drop table if exists kb_upload_session;
@@ -295,6 +297,36 @@ create table biz_asset (
   index idx_asset_owner (owner_id)
 );
 
+-- checked_at 用毫秒精度。趋势按 batch_id 聚合，不把这一列当成批次唯一键。
+create table sys_module_check (
+  id varchar(64) primary key,
+  batch_id varchar(64) not null,
+  module_code varchar(32) not null,
+  module_name varchar(64) not null,
+  status varchar(16) not null,
+  latency_ms int not null,
+  message varchar(500) not null,
+  checked_at datetime(3) not null,
+  index idx_module_check_time (checked_at),
+  index idx_module_check_batch (batch_id)
+);
+
+create table sys_access_log (
+  id varchar(64) primary key,
+  request_id varchar(64) not null,
+  method varchar(16) not null,
+  path varchar(200) not null,
+  http_status int not null,
+  result_code int null,
+  result_message varchar(500) null,
+  exception_type varchar(128) null,
+  duration_ms int not null,
+  username varchar(64) null,
+  created_at datetime not null,
+  index idx_access_log_time (created_at),
+  index idx_access_log_path (path)
+);
+
 create table biz_asset_log (
   id varchar(64) primary key,
   asset_id varchar(64) not null,
@@ -343,7 +375,8 @@ insert into sys_permission (id, code, name) values
   ('perm-agent-chat', 'agent:chat', '使用智能问答'),
   ('perm-agent-task', 'agent:task', '运行智能体任务'),
   ('perm-ticket-claim', 'ticket:claim', '申请接单'),
-  ('perm-ticket-claim-approve', 'ticket:claim:approve', '审批接单');
+  ('perm-ticket-claim-approve', 'ticket:claim:approve', '审批接单'),
+  ('perm-system-observe', 'system:observe', '查看系统运行情况');
 
 insert into sys_role_permission (role_id, permission_id) values
   -- admin：全部权限
@@ -370,6 +403,7 @@ insert into sys_role_permission (role_id, permission_id) values
   ('role-admin', 'perm-kb-edit'),
   ('role-admin', 'perm-ticket-claim'),
   ('role-admin', 'perm-ticket-claim-approve'),
+  ('role-admin', 'perm-system-observe'),
   -- staff：运维专员
   ('role-staff', 'perm-agent-chat'),
   ('role-staff', 'perm-agent-task'),
@@ -400,6 +434,9 @@ insert into sys_menu (id, title, name, path, component, icon, permission_code, k
   ('full-kb', '知识库', 'KbRoot', '/kb', 'RouteView', 'kb', null, 1, null, 40, 'full'),
   ('full-kb-list', '文章列表', 'KbList', '/kb/list', 'KbListView', null, 'kb:view', 1, 'full-kb', 41, 'full'),
   ('full-user', '用户与身份', 'UserManagement', '/system/users', 'UserManagementView', 'user', 'auth:user:manage', 1, null, 50, 'full'),
+  ('full-system', '系统详情', 'SystemRoot', '/system/observe', 'RouteView', 'monitor', null, 1, null, 55, 'full'),
+  ('full-system-overview', '运行概览', 'SystemOverview', '/system/overview', 'SystemOverviewView', null, 'system:observe', 1, 'full-system', 56, 'full'),
+  ('full-system-logs', '运行日志', 'SystemLogs', '/system/logs', 'SystemLogsView', null, 'system:observe', 1, 'full-system', 57, 'full'),
   ('staff-home', '工作台', 'Home', '/home', 'HomeView', 'home', 'agent:chat', 1, null, 10, 'staff'),
   ('staff-ops', '运维', 'OpsRoot', '/ops', 'RouteView', 'ticket', null, 1, null, 20, 'staff'),
   ('staff-dashboard', '运维看板', 'Dashboard', '/ops/dashboard', 'DashboardView', 'dashboard', 'dashboard:view', 1, 'staff-ops', 21, 'staff'),

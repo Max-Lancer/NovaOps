@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.novaops.backend.system.mapper.SystemObserveMapper">
+
+  <insert id="insertCheck">
+    insert into sys_module_check (
+      id, batch_id, module_code, module_name, status, latency_ms, message, checked_at
+    ) values (
+      #{id}, #{batchId}, #{moduleCode}, #{moduleName}, #{status}, #{latencyMs}, #{message}, #{checkedAt}
+    )
+  </insert>
+
+  <!-- 按批次取最近一次，不把 checked_at 当成批次唯一键（同一毫秒内仍可能并列） -->
+  <select id="findLatestBatchId" resultType="string">
+    select batch_id
+    from sys_module_check
+    group by batch_id
+    order by max(checked_at) desc
+    limit 1
+  </select>
+
+  <select id="listChecksByBatch" resultType="com.novaops.backend.system.model.ModuleCheckRecord">
+    select id, batch_id, module_code, module_name, status, latency_ms, message, checked_at
+    from sys_module_check
+    where batch_id = #{batchId}
+    order by checked_at asc, module_code asc
+  </select>
+
+  <select id="listRecentChecks" resultType="com.novaops.backend.system.model.ModuleCheckRecord">
+    select id, batch_id, module_code, module_name, status, latency_ms, message, checked_at
+    from sys_module_check
+    order by checked_at desc, batch_id asc, module_code asc
+    limit #{limit}
+  </select>
+
+  <delete id="deleteChecksBefore">
+    delete from sys_module_check
+    where checked_at &lt; #{cutoff}
+  </delete>
+
+  <insert id="insertAccessLog">
+    insert into sys_access_log (
+      id, request_id, method, path, http_status, result_code, result_message,
+      exception_type, duration_ms, username, created_at
+    ) values (
+      #{id}, #{requestId}, #{method}, #{path}, #{httpStatus}, #{resultCode}, #{resultMessage},
+      #{exceptionType}, #{durationMs}, #{username}, #{createdAt}
+    )
+  </insert>
+
+  <sql id="accessLogFilters">
+    where 1 = 1
+    <if test="keyword != null and keyword != ''">
+      and (
+        lower(path) like concat('%', lower(#{keyword}), '%')
+        or lower(ifnull(username, '')) like concat('%', lower(#{keyword}), '%')
+        or lower(request_id) like concat('%', lower(#{keyword}), '%')
+        or lower(ifnull(result_message, '')) like concat('%', lower(#{keyword}), '%')
+      )
+    </if>
+    <if test="method != null and method != ''">
+      and method = #{method}
+    </if>
+    <if test="httpStatus != null">
+      and http_status = #{httpStatus}
+    </if>
+    <if test="resultCode != null">
+      and result_code = #{resultCode}
+    </if>
+    <if test="startDate != null">
+      and created_at <![CDATA[>=]]> #{startDate}
+    </if>
+    <if test="endDate != null">
+      and created_at <![CDATA[<=]]> #{endDate}
+    </if>
+  </sql>
+
+  <select id="countAccessLogs" resultType="long">
+    select count(1)
+    from sys_access_log
+    <include refid="accessLogFilters" />
+  </select>
+
+  <select id="queryAccessLogs" resultType="com.novaops.backend.system.model.AccessLogRecord">
+    select id, request_id, method, path, http_status, result_code, result_message,
+           exception_type, duration_ms, username, created_at
+    from sys_access_log
+    <include refid="accessLogFilters" />
+    order by created_at desc
+    limit #{limit} offset #{offset}
+  </select>
+
+  <delete id="deleteAccessLogsBefore">
+    delete from sys_access_log
+    where created_at &lt; #{cutoff}
+  </delete>
+
+  <select id="countAllAccessLogs" resultType="long">
+    select count(1) from sys_access_log
+  </select>
+
+  <delete id="deleteOldestAccessLogs">
+    delete from sys_access_log
+    where id in (
+      select id from (
+        select id from sys_access_log order by created_at asc limit #{limit}
+      ) old_logs
+    )
+  </delete>
+</mapper>
