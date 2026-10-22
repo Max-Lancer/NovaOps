@@ -305,6 +305,15 @@ mvn -gs mvn-settings.xml test
 
 生产构建生成在 `dist/`，该目录已被 Git 忽略，可部署到 Nginx 等静态服务器。
 
+### CI
+
+每次向 `master` 推送，以及所有 pull request，都会在 GitHub Actions 中并行运行两项检查（见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)）：
+
+- **frontend**：Node.js 22，执行 `npm ci`、`npm run lint`、`npm run test`、`npm run build`。
+- **backend**：Java 17（Temurin），在 `backend/` 下执行 `mvn -B test`。测试使用 H2，不依赖 MySQL；依赖从 Maven Central 拉取。
+
+结果在仓库的 **Actions** 页，以及对应 pull request 的 **Checks** 中查看。仓库可以在分支保护规则里把 `frontend` 和 `backend` 设为合并前必须通过的检查。本地的 Husky 与 commitlint 仍然负责提交前拦截，CI 是远端门禁。
+
 ## 安全说明
 
 - 生产环境必须覆盖默认数据库密码和 `NOVAOPS_JWT_SECRET`。
