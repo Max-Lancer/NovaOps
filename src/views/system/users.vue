@@ -86,7 +86,7 @@ onMounted(async () => { await Promise.all([loadRoles(), getPermissionCatalogApi(
       <a-row :gutter="16">
         <a-col v-for="role in roles" :key="role.id" :xs="24" :lg="8">
           <a-card size="small" class="role-item"><a-statistic :title="role.name" :value="role.permissions.length" suffix="项权限" /><p>{{ role.description }}</p><a-space wrap><a-tag v-for="code in role.permissions" :key="code">{{ catalog.find(item => item.code === code)?.name || code }}</a-tag></a-space>
-            <div class="role-actions" v-if="role.id !== 'role-admin'"><a-button size="small" @click="editRole(role)">编辑</a-button><a-button v-if="!['role-staff', 'role-guest', 'role-member'].includes(role.id)" size="small" danger @click="removeRole(role)">删除</a-button></div>
+            <div v-if="role.id !== 'role-admin'" class="role-actions"><a-button size="small" @click="editRole(role)">编辑</a-button><a-button v-if="!['role-staff', 'role-guest', 'role-member'].includes(role.id)" size="small" danger @click="removeRole(role)">删除</a-button></div>
           </a-card>
         </a-col>
       </a-row>
