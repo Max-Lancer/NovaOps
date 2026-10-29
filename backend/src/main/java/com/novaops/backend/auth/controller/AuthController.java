@@ -8,6 +8,9 @@ import com.novaops.backend.auth.dto.RefreshTokenRequest;
 import com.novaops.backend.auth.dto.RegisterRequest;
 import com.novaops.backend.auth.dto.RegisterResponse;
 import com.novaops.backend.auth.dto.RoleResponse;
+import com.novaops.backend.auth.dto.RoleSaveRequest;
+import com.novaops.backend.auth.dto.PermissionOption;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import com.novaops.backend.auth.dto.UserProfileResponse;
 import com.novaops.backend.auth.dto.UserListQuery;
 import com.novaops.backend.auth.dto.UserListItemResponse;
@@ -72,7 +75,31 @@ public class AuthController {
 
   @GetMapping("/roles")
   public ApiResponse<List<RoleResponse>> roles() {
+    authService.assertAdmin(RequestContext.getRequired());
     return ApiResponse.success(authService.listRoles());
+  }
+
+  @GetMapping("/permissions")
+  public ApiResponse<List<PermissionOption>> permissions() {
+    return ApiResponse.success(authService.permissionCatalog(RequestContext.getRequired()));
+  }
+
+  @PostMapping("/roles")
+  public ApiResponse<Void> createRole(@Valid @RequestBody RoleSaveRequest request) {
+    authService.createRole(RequestContext.getRequired(), request);
+    return ApiResponse.success(null, "角色已创建");
+  }
+
+  @PutMapping("/roles/{id}")
+  public ApiResponse<Void> saveRole(@PathVariable String id, @Valid @RequestBody RoleSaveRequest request) {
+    authService.updateRole(RequestContext.getRequired(), id, request);
+    return ApiResponse.success(null, "角色已更新");
+  }
+
+  @DeleteMapping("/roles/{id}")
+  public ApiResponse<Void> deleteRole(@PathVariable String id) {
+    authService.deleteRole(RequestContext.getRequired(), id);
+    return ApiResponse.success(null, "角色已删除");
   }
 
   @GetMapping("/users")

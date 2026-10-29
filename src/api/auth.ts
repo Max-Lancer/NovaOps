@@ -47,3 +47,8 @@ export const getUserOptionsApi = () => request.get<UserOptionDto[]>('/auth/user-
 export const updateUserStatusApi = (id: string, enabled: boolean) => request.put<void, { enabled: boolean }>(`/auth/users/${id}/status`, { enabled })
 export const updateUserRoleApi = (id: string, roleId: string) => request.put<void, { roleId: string }>(`/auth/users/${id}/role`, { roleId })
 export const resetUserPasswordApi = (id: string, password: string) => request.put<void, { password: string }>(`/auth/users/${id}/password`, { password })
+
+export const getPermissionCatalogApi = () => request.get<import('@/types/auth').PermissionOption[]>('/auth/permissions')
+export const createRoleApi = (data: import('@/types/auth').RoleSaveDto) => request.post<void, import('@/types/auth').RoleSaveDto>('/auth/roles', data)
+export const updateRoleApi = (id: string, data: import('@/types/auth').RoleSaveDto) => request.put<void, import('@/types/auth').RoleSaveDto>(`/auth/roles/${id}`, data)
+export const deleteRoleApi = (id: string) => request.delete<void>(`/auth/roles/${id}`)

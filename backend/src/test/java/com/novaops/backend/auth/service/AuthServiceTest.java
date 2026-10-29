@@ -15,6 +15,7 @@ import com.novaops.backend.auth.dto.RefreshTokenRequest;
 import com.novaops.backend.auth.dto.RegisterRequest;
 import com.novaops.backend.auth.dto.RegisterResponse;
 import com.novaops.backend.auth.dto.RoleResponse;
+import com.novaops.backend.auth.dto.RoleSaveRequest;
 import com.novaops.backend.auth.dto.UserOptionResponse;
 import com.novaops.backend.auth.mail.EmailSender;
 import com.novaops.backend.auth.mapper.AuthMapper;
@@ -194,6 +195,81 @@ class AuthServiceTest {
     assertThatThrownBy(() -> authService.refresh(request))
         .isInstanceOf(BusinessException.class)
         .hasMessageContaining("已失效");
+  }
+
+  @Test
+  void rejectsUnknownPermissionEvenWhenPresentInDatabase() {
+    when(authMapper.findUserById("u-staff")).thenReturn(user("role-admin", true));
+    when(authMapper.findRoleById("role-admin")).thenReturn(role("role-admin", "admin"));
+    when(authMapper.listPermissionCodes()).thenReturn(List.of("ticket:view", "invented:permission"));
+    var request = new RoleSaveRequest("test", "", List.of("invented:permission"));
+    assertThatThrownBy(() -> authService.createRole(session(), request)).hasMessageContaining("系统不支持");
+    verify(authMapper, never()).insertRole(anyString(), anyString(), anyString(), anyString());
+  }
+
+  @Test
+  void blocksOperationWithoutPageAccess() {
+    when(authMapper.findUserById("u-staff")).thenReturn(user("role-admin", true));
+    when(authMapper.findRoleById("role-admin")).thenReturn(role("role-admin", "admin"));
+    when(authMapper.listPermissionCodes()).thenReturn(List.of("kb:view", "kb:edit"));
+    assertThatThrownBy(() -> authService.createRole(session(), new RoleSaveRequest("test", "", List.of("kb:edit"))))
+        .hasMessageContaining("kb:view");
+  }
+
+  @Test
+  void allowsMemberTicketPermissionsWithoutTicketListAccess() {
+    when(authMapper.findUserById("u-staff")).thenReturn(user("role-admin", true));
+    when(authMapper.findRoleById("role-admin")).thenReturn(role("role-admin", "admin"));
+    when(authMapper.lockRole("role-member")).thenReturn(role("role-member", "member"));
+    when(authMapper.listPermissionCodes()).thenReturn(List.of("ticket:create", "ticket:claim", "agent:chat"));
+    when(authMapper.listPermissionsByRoleId("role-member")).thenReturn(List.of("ticket:create", "ticket:claim", "agent:chat"));
+    when(authMapper.insertRolePermission(eq("role-member"), anyString())).thenReturn(1);
+    authService.updateRole(session(), "role-member", new RoleSaveRequest("成员", "", List.of("ticket:create", "ticket:claim", "agent:chat")));
+    verify(authMapper).insertRolePermission("role-member", "ticket:create");
+    verify(authMapper).insertRolePermission("role-member", "ticket:claim");
+    verify(authMapper).insertRolePermission("role-member", "agent:chat");
+  }
+
+  @Test
+  void rejectsTicketCreationWithoutAccessibleEntryOnCreateAndUpdate() {
+    when(authMapper.findUserById("u-staff")).thenReturn(user("role-admin", true));
+    when(authMapper.findRoleById("role-admin")).thenReturn(role("role-admin", "admin"));
+    when(authMapper.listPermissionCodes()).thenReturn(List.of("ticket:create", "ticket:view", "agent:chat"));
+    when(authMapper.lockRole("custom")).thenReturn(role("custom", "custom"));
+    var request = new RoleSaveRequest("自定义", "", List.of("ticket:create"));
+    assertThatThrownBy(() -> authService.createRole(session(), request)).hasMessageContaining("请同时选择");
+    assertThatThrownBy(() -> authService.updateRole(session(), "custom", request)).hasMessageContaining("请同时选择");
+    verify(authMapper, never()).insertRole(anyString(), anyString(), anyString(), anyString());
+    verify(authMapper, never()).deleteRolePermissions(anyString());
+  }
+
+  @Test
+  void acceptsTicketCreationWithTicketListAccess() {
+    when(authMapper.findUserById("u-staff")).thenReturn(user("role-admin", true));
+    when(authMapper.findRoleById("role-admin")).thenReturn(role("role-admin", "admin"));
+    when(authMapper.lockRole("custom")).thenReturn(role("custom", "custom"));
+    when(authMapper.listPermissionCodes()).thenReturn(List.of("ticket:create", "ticket:view"));
+    when(authMapper.insertRolePermission(eq("custom"), anyString())).thenReturn(1);
+    authService.updateRole(session(), "custom", new RoleSaveRequest("自定义", "", List.of("ticket:create", "ticket:view")));
+    verify(authMapper).insertRolePermission("custom", "ticket:view");
+    verify(authMapper, never()).insertRolePermission("custom", "agent:chat");
+  }
+
+  @Test
+  void refusesDeletingRoleStillUsedByUsers() {
+    when(authMapper.findUserById("u-staff")).thenReturn(user("role-admin", true));
+    when(authMapper.findRoleById("role-admin")).thenReturn(role("role-admin", "admin"));
+    when(authMapper.lockRole("custom")).thenReturn(role("custom", "custom"));
+    when(authMapper.countUsersByRole("custom")).thenReturn(1L);
+    assertThatThrownBy(() -> authService.deleteRole(session(), "custom")).hasMessageContaining("关联用户");
+    verify(authMapper, never()).deleteRole("custom");
+  }
+
+  @Test
+  void nonAdminCannotManageRoles() {
+    when(authMapper.findUserById("u-staff")).thenReturn(user("role-staff", true));
+    when(authMapper.findRoleById("role-staff")).thenReturn(role("role-staff", "staff"));
+    assertThatThrownBy(() -> authService.permissionCatalog(session())).hasMessageContaining("仅系统管理员");
   }
 
   private RefreshTokenRecord refreshToken(String token, boolean revoked) {

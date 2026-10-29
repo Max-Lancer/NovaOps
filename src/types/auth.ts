@@ -62,3 +62,6 @@ export interface AuthTokenDto {
 }
 
 export type LoginResponseDto = AuthTokenDto
+
+export interface PermissionOption { code: string; name: string; group: string }
+export interface RoleSaveDto { name: string; description: string; permissions: string[] }

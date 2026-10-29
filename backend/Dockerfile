@@ -37,8 +37,8 @@ ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -Dfile.encoding=UTF-8" \
 USER appuser
 EXPOSE 8090
 
-# /api/auth/roles 是公开接口，适合做存活探针
+# 存活探针不依赖身份或业务数据。
 HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=20 \
-    CMD curl -fsS http://127.0.0.1:8090/api/auth/roles >/dev/null || exit 1
+    CMD curl -fsS http://127.0.0.1:8090/api/health >/dev/null || exit 1
 
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]
