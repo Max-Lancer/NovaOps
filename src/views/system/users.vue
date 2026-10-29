@@ -82,7 +82,7 @@ onMounted(async () => { await Promise.all([loadRoles(), getPermissionCatalogApi(
   <div class="user-page">
     <a-card title="角色与权限" class="role-card">
       <template #extra><a-button type="primary" @click="editRole()">新增角色</a-button></template>
-      <p>系统管理员角色受保护；系统预设角色不能删除。业务操作需同时授予对应页面访问权限。</p>
+      <p>系统管理员角色受保护；系统预设角色不能删除。部分业务操作需同时授予对应页面访问权限。</p>
       <a-row :gutter="16">
         <a-col v-for="role in roles" :key="role.id" :xs="24" :lg="8">
           <a-card size="small" class="role-item"><a-statistic :title="role.name" :value="role.permissions.length" suffix="项权限" /><p>{{ role.description }}</p><a-space wrap><a-tag v-for="code in role.permissions" :key="code">{{ catalog.find(item => item.code === code)?.name || code }}</a-tag></a-space>
@@ -109,7 +109,7 @@ onMounted(async () => { await Promise.all([loadRoles(), getPermissionCatalogApi(
     <a-modal v-model:open="roleOpen" :title="editingRole ? '编辑角色' : '新增角色'" :confirm-loading="roleSaving" width="720px" @ok="saveRole">
       <a-form layout="vertical"><a-form-item label="角色名称" required><a-input v-model:value="roleForm.name" :maxlength="100" /></a-form-item>
         <a-form-item label="角色说明"><a-input v-model:value="roleForm.description" :maxlength="255" /></a-form-item>
-        <a-form-item label="权限配置"><p>勾选已有页面与操作；业务操作需要对应的页面访问权限。</p>
+        <a-form-item label="权限配置"><p>勾选已有页面与操作；部分业务操作需要对应的页面访问权限。</p>
           <a-checkbox-group v-model:value="roleForm.permissions" class="permission-groups"><section v-for="(items, group) in permissionGroups" :key="group"><strong>{{ group }}</strong><div><a-checkbox v-for="item in items" :key="item.code" :value="item.code">{{ item.name }} <small>{{ item.code }}</small></a-checkbox></div></section></a-checkbox-group>
         </a-form-item>
       </a-form>

@@ -1,6 +1,7 @@
 package com.novaops.backend.common.security;
 
 import com.novaops.backend.common.exception.BusinessException;
+import com.novaops.backend.common.web.RequestAttributes;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
@@ -32,6 +33,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     CurrentSession session = jwtService.parseAccessToken(token);
     authService.requireEnabledUser(session.getUserId());
     RequestContext.set(session);
+    request.setAttribute(RequestAttributes.USERNAME, session.getUsername());
     return true;
   }
 

@@ -1,4 +1,6 @@
 SET NAMES utf8mb4;
+drop table if exists sys_access_log;
+drop table if exists sys_module_check;
 drop table if exists biz_ticket_attachment;
 drop table if exists kb_upload_chunk;
 drop table if exists kb_upload_session;
@@ -219,16 +221,20 @@ create table biz_ticket (
   status varchar(32) not null,
   priority varchar(32) not null,
   assignee_id varchar(64) null,
+  claimant_id varchar(64) null,
   creator_id varchar(64) not null,
   due_date datetime null,
   created_at datetime not null,
   updated_at datetime not null,
+  done_at datetime null,
   index idx_ticket_updated (updated_at desc),
   index idx_ticket_status (status),
   index idx_ticket_priority (priority),
   index idx_ticket_assignee (assignee_id),
   index idx_ticket_creator (creator_id),
+  index idx_ticket_done_at (done_at),
   constraint fk_ticket_assignee foreign key (assignee_id) references sys_user (id),
+  constraint fk_ticket_claimant foreign key (claimant_id) references sys_user (id),
   constraint fk_ticket_creator foreign key (creator_id) references sys_user (id)
 );
 
@@ -291,6 +297,36 @@ create table biz_asset (
   index idx_asset_owner (owner_id)
 );
 
+-- checked_at 用毫秒精度。趋势按 batch_id 聚合，不把这一列当成批次唯一键。
+create table sys_module_check (
+  id varchar(64) primary key,
+  batch_id varchar(64) not null,
+  module_code varchar(32) not null,
+  module_name varchar(64) not null,
+  status varchar(16) not null,
+  latency_ms int not null,
+  message varchar(500) not null,
+  checked_at datetime(3) not null,
+  index idx_module_check_time (checked_at),
+  index idx_module_check_batch (batch_id)
+);
+
+create table sys_access_log (
+  id varchar(64) primary key,
+  request_id varchar(64) not null,
+  method varchar(16) not null,
+  path varchar(200) not null,
+  http_status int not null,
+  result_code int null,
+  result_message varchar(500) null,
+  exception_type varchar(128) null,
+  duration_ms int not null,
+  username varchar(64) null,
+  created_at datetime not null,
+  index idx_access_log_time (created_at),
+  index idx_access_log_path (path)
+);
+
 create table biz_asset_log (
   id varchar(64) primary key,
   asset_id varchar(64) not null,
@@ -312,9 +348,9 @@ insert into sys_user (id, username, email, password_hash, display_name, role_id,
 
 insert into sys_role (id, code, name, description, sort_order) values
   ('role-admin', 'admin', '管理员', '管理用户、身份、知识库以及全部业务数据', 10),
-  ('role-staff', 'staff', '运维人员', '处理工单、资产与使用智能问答', 20),
-  ('role-guest', 'guest', '访客', '只读访问授权看板与智能问答', 30),
-  ('role-member', 'member', '普通成员', '注册用户默认身份：只读看板、提交工单与智能问答', 40);
+  ('role-staff', 'staff', '运维专员', '处理工单、资产、审批接单并使用智能问答', 20),
+  ('role-guest', 'guest', '访客', '使用工作台中的智能问答', 30),
+  ('role-member', 'member', '员工', '提问、报故障并发起接单申请', 40);
 
 insert into sys_permission (id, code, name) values
   ('perm-dashboard-view', 'dashboard:view', '查看看板'),
@@ -337,7 +373,10 @@ insert into sys_permission (id, code, name) values
   ('perm-kb-edit', 'kb:edit', '编辑知识库'),
   ('perm-auth-user-manage', 'auth:user:manage', '管理用户与身份'),
   ('perm-agent-chat', 'agent:chat', '使用智能问答'),
-  ('perm-agent-task', 'agent:task', '运行智能体任务');
+  ('perm-agent-task', 'agent:task', '运行智能体任务'),
+  ('perm-ticket-claim', 'ticket:claim', '申请接单'),
+  ('perm-ticket-claim-approve', 'ticket:claim:approve', '审批接单'),
+  ('perm-system-observe', 'system:observe', '查看系统运行情况');
 
 insert into sys_role_permission (role_id, permission_id) values
   -- admin：全部权限
@@ -362,7 +401,10 @@ insert into sys_role_permission (role_id, permission_id) values
   ('role-admin', 'perm-asset-scrap'),
   ('role-admin', 'perm-kb-view'),
   ('role-admin', 'perm-kb-edit'),
-  -- staff：运维人员
+  ('role-admin', 'perm-ticket-claim'),
+  ('role-admin', 'perm-ticket-claim-approve'),
+  ('role-admin', 'perm-system-observe'),
+  -- staff：运维专员
   ('role-staff', 'perm-agent-chat'),
   ('role-staff', 'perm-agent-task'),
   ('role-staff', 'perm-dashboard-view'),
@@ -374,37 +416,46 @@ insert into sys_role_permission (role_id, permission_id) values
   ('role-staff', 'perm-ticket-comment'),
   ('role-staff', 'perm-asset-view'),
   ('role-staff', 'perm-asset-claim'),
+  ('role-staff', 'perm-ticket-claim-approve'),
   -- guest：访客
-  ('role-guest', 'perm-dashboard-view'),
   ('role-guest', 'perm-agent-chat'),
-  -- member：普通成员（注册默认）
-  ('role-member', 'perm-dashboard-view'),
+  -- member：员工（注册默认）
   ('role-member', 'perm-ticket-create'),
+  ('role-member', 'perm-ticket-claim'),
   ('role-member', 'perm-agent-chat');
 
 insert into sys_menu (id, title, name, path, component, icon, permission_code, keep_alive, parent_id, sort_order, menu_scope) values
-  ('full-dashboard', 'Dashboard', 'Dashboard', '/dashboard', 'DashboardView', 'dashboard', 'dashboard:view', 1, null, 10, 'full'),
-  ('full-ticket', '工单', 'TicketRoot', '/ticket', 'RouteView', 'ticket', null, 1, null, 20, 'full'),
-  ('full-ticket-list', '工单列表', 'TicketList', '/ticket/list', 'TicketListView', null, 'ticket:view', 1, 'full-ticket', 21, 'full'),
-  ('full-asset', '资产', 'AssetRoot', '/asset', 'RouteView', 'asset', null, 1, null, 30, 'full'),
-  ('full-asset-list', '资产列表', 'AssetList', '/asset/list', 'AssetListView', null, 'asset:view', 1, 'full-asset', 31, 'full'),
+  ('full-home', '工作台', 'Home', '/home', 'HomeView', 'home', 'agent:chat', 1, null, 10, 'full'),
+  ('full-ops', '运维', 'OpsRoot', '/ops', 'RouteView', 'ticket', null, 1, null, 20, 'full'),
+  ('full-dashboard', '运维看板', 'Dashboard', '/ops/dashboard', 'DashboardView', 'dashboard', 'dashboard:view', 1, 'full-ops', 21, 'full'),
+  ('full-ticket-list', '工单列表', 'TicketList', '/ops/ticket/list', 'TicketListView', null, 'ticket:view', 1, 'full-ops', 22, 'full'),
+  ('full-claim', '待接工单', 'ClaimQueue', '/ops/ticket/claim', 'ClaimQueueView', null, 'ticket:claim', 1, 'full-ops', 24, 'full'),
+  ('full-asset-list', '资产列表', 'AssetList', '/ops/asset/list', 'AssetListView', null, 'asset:view', 1, 'full-ops', 23, 'full'),
   ('full-kb', '知识库', 'KbRoot', '/kb', 'RouteView', 'kb', null, 1, null, 40, 'full'),
   ('full-kb-list', '文章列表', 'KbList', '/kb/list', 'KbListView', null, 'kb:view', 1, 'full-kb', 41, 'full'),
   ('full-user', '用户与身份', 'UserManagement', '/system/users', 'UserManagementView', 'user', 'auth:user:manage', 1, null, 50, 'full'),
-  ('staff-dashboard', 'Dashboard', 'Dashboard', '/dashboard', 'DashboardView', 'dashboard', 'dashboard:view', 1, null, 10, 'staff'),
-  ('staff-ticket', '工单', 'TicketRoot', '/ticket', 'RouteView', 'ticket', null, 1, null, 20, 'staff'),
-  ('staff-ticket-list', '工单列表', 'TicketList', '/ticket/list', 'TicketListView', null, 'ticket:view', 1, 'staff-ticket', 21, 'staff'),
+  ('full-system', '系统详情', 'SystemRoot', '/system/observe', 'RouteView', 'monitor', null, 1, null, 55, 'full'),
+  ('full-system-overview', '运行概览', 'SystemOverview', '/system/overview', 'SystemOverviewView', null, 'system:observe', 1, 'full-system', 56, 'full'),
+  ('full-system-logs', '运行日志', 'SystemLogs', '/system/logs', 'SystemLogsView', null, 'system:observe', 1, 'full-system', 57, 'full'),
+  ('staff-home', '工作台', 'Home', '/home', 'HomeView', 'home', 'agent:chat', 1, null, 10, 'staff'),
+  ('staff-ops', '运维', 'OpsRoot', '/ops', 'RouteView', 'ticket', null, 1, null, 20, 'staff'),
+  ('staff-dashboard', '运维看板', 'Dashboard', '/ops/dashboard', 'DashboardView', 'dashboard', 'dashboard:view', 1, 'staff-ops', 21, 'staff'),
+  ('staff-ticket-list', '工单列表', 'TicketList', '/ops/ticket/list', 'TicketListView', null, 'ticket:view', 1, 'staff-ops', 22, 'staff'),
+  ('staff-asset-list', '资产列表', 'AssetList', '/ops/asset/list', 'AssetListView', null, 'asset:view', 1, 'staff-ops', 23, 'staff'),
   ('full-agent-console', '智能体工作台', 'AgentConsole', '/agent/console', 'AgentConsoleView', 'robot', 'agent:task', 1, null, 45, 'full'),
   ('staff-agent-console', '智能体工作台', 'AgentConsole', '/agent/console', 'AgentConsoleView', 'robot', 'agent:task', 1, null, 45, 'staff'),
   ('full-agent-tasks', '任务中心', 'AgentTasks', '/agent/tasks', 'AgentTasksView', 'robot', 'agent:task', 1, null, 46, 'full'),
   ('staff-agent-tasks', '任务中心', 'AgentTasks', '/agent/tasks', 'AgentTasksView', 'robot', 'agent:task', 1, null, 46, 'staff'),
-  ('guest-dashboard', 'Dashboard', 'Dashboard', '/dashboard', 'DashboardView', 'dashboard', 'dashboard:view', 1, null, 10, 'guest');
+  ('member-home', '工作台', 'Home', '/home', 'HomeView', 'home', 'agent:chat', 1, null, 10, 'member'),
+  ('member-claim', '待接工单', 'ClaimQueue', '/ops/ticket/claim', 'ClaimQueueView', 'ticket', 'ticket:claim', 1, null, 20, 'member'),
+  ('member-mine', '我的工单', 'MyTickets', '/ops/ticket/mine', 'MyTicketsView', 'ticket', 'ticket:claim', 1, null, 21, 'member'),
+  ('guest-home', '工作台', 'Home', '/home', 'HomeView', 'home', 'agent:chat', 1, null, 10, 'guest');
 
-insert into biz_ticket (id, title, description, status, priority, assignee_id, creator_id, due_date, created_at, updated_at) values
-  ('A-TICKET-0001', 'TENANT-A 网络与终端巡检异常 #1', '巡检发现交换机端口丢包，需要排查链路质量。', 'pending', 'medium', 'u-tom', 'u-admin', '2026-04-25 18:00:00', '2026-04-20 09:00:00', '2026-04-20 11:00:00'),
-  ('A-TICKET-0002', 'TENANT-A VPN 访问波动 #2', '多名员工反馈 VPN 间歇性掉线，需排查网关与策略。', 'processing', 'high', 'u-jerry', 'u-admin', '2026-04-24 18:00:00', '2026-04-19 10:00:00', '2026-04-20 12:30:00'),
-  ('A-TICKET-0003', 'TENANT-A 终端补丁异常 #3', 'Windows 补丁安装失败，影响办公终端安全合规。', 'review', 'urgent', 'u-alice', 'u-staff', '2026-04-23 18:00:00', '2026-04-18 13:00:00', '2026-04-20 14:00:00'),
-  ('A-TICKET-0004', 'TENANT-A 日志采集恢复验证 #4', '采集链路已恢复，需要复核日志完整性与时间同步。', 'done', 'low', 'u-admin', 'u-staff', '2026-04-22 18:00:00', '2026-04-17 14:00:00', '2026-04-20 15:00:00');
+insert into biz_ticket (id, title, description, status, priority, assignee_id, creator_id, due_date, created_at, updated_at, done_at) values
+  ('A-TICKET-0001', 'TENANT-A 网络与终端巡检异常 #1', '巡检发现交换机端口丢包，需要排查链路质量。', 'pending', 'medium', 'u-tom', 'u-admin', '2026-04-25 18:00:00', '2026-04-20 09:00:00', '2026-04-20 11:00:00', null),
+  ('A-TICKET-0002', 'TENANT-A VPN 访问波动 #2', '多名员工反馈 VPN 间歇性掉线，需排查网关与策略。', 'processing', 'high', 'u-jerry', 'u-admin', '2026-04-24 18:00:00', '2026-04-19 10:00:00', '2026-04-20 12:30:00', null),
+  ('A-TICKET-0003', 'TENANT-A 终端补丁异常 #3', 'Windows 补丁安装失败，影响办公终端安全合规。', 'review', 'urgent', 'u-alice', 'u-staff', '2026-04-23 18:00:00', '2026-04-18 13:00:00', '2026-04-20 14:00:00', null),
+  ('A-TICKET-0004', 'TENANT-A 日志采集恢复验证 #4', '采集链路已恢复，需要复核日志完整性与时间同步。', 'done', 'low', 'u-admin', 'u-staff', '2026-04-22 18:00:00', '2026-04-17 14:00:00', '2026-04-20 15:00:00', '2026-04-20 15:00:00');
 
 insert into biz_ticket_asset_rel (ticket_id, asset_id) values
   ('A-TICKET-0001', 'ASSET-1'),

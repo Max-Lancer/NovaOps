@@ -139,7 +139,7 @@ onMounted(() => {
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'actions'">
-            <a-button type="link" size="small" @click="router.push(`/ticket/detail/${record.id}`)">查看</a-button>
+            <a-button type="link" size="small" @click="router.push(`/ops/ticket/detail/${record.id}`)">查看</a-button>
           </template>
         </template>
       </a-table>

@@ -27,7 +27,7 @@ export const setupRouterGuard = (router: Router) => {
     }
 
     if (to.path === '/login' && authStore.isAuthenticated) {
-      return '/dashboard'
+      return '/home'
     }
 
 //用户虽授权，但store中没有用户信息，尝试拉取用户信息，
@@ -56,7 +56,7 @@ export const setupRouterGuard = (router: Router) => {
     }
 
     // 默认首页没有访问权限时，跳到第一个可见页面；无页面则进入 403。
-    if (to.path === '/dashboard' && !permissionStore.hasPermission('dashboard:view')) {
+    if (to.path === '/home' && !permissionStore.hasPermission('agent:chat')) {
       const firstLeaf = (menus: typeof permissionStore.menus): string | undefined => {
         for (const menu of menus) {
           if (menu.component !== 'RouteView') return menu.path
@@ -64,7 +64,7 @@ export const setupRouterGuard = (router: Router) => {
           if (child) return child
         }
       }
-      return firstLeaf(permissionStore.menus) || '/403'
+      return firstLeaf(permissionStore.menus) || (permissionStore.hasPermission('agent:chat') ? '/agent/chat' : '/403')
     }
 
     //路由的 meta 里定义的权限码，用户想访问需要有对应的码才行

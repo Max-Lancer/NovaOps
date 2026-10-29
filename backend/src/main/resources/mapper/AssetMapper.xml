@@ -2,7 +2,7 @@
 <!DOCTYPE mapper
   PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
   "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.novaops.backend.asset.mapper.AssetMapper">
+<mapper namespace="com.novaops.backend.ops.asset.mapper.AssetMapper">
 
   <sql id="assetFilters">
     where a.deleted = 0
@@ -29,7 +29,7 @@
     <include refid="assetFilters" />
   </select>
 
-  <select id="queryAssets" resultType="com.novaops.backend.asset.model.AssetRecord">
+  <select id="queryAssets" resultType="com.novaops.backend.ops.asset.model.AssetRecord">
     select a.id, a.asset_no, a.name, a.type, a.status,
            a.owner_id, u.display_name as owner_name, a.location,
            a.purchase_date, a.updated_at
@@ -40,7 +40,7 @@
     limit #{limit} offset #{offset}
   </select>
 
-  <select id="findAsset" resultType="com.novaops.backend.asset.model.AssetRecord">
+  <select id="findAsset" resultType="com.novaops.backend.ops.asset.model.AssetRecord">
     select a.id, a.asset_no, a.name, a.type, a.status,
            a.owner_id, u.display_name as owner_name, a.location, a.spec,
            a.remark, a.purchase_date, a.created_at, a.updated_at, a.version
@@ -51,7 +51,7 @@
     limit 1
   </select>
 
-  <insert id="insertAsset" parameterType="com.novaops.backend.asset.model.AssetRecord">
+  <insert id="insertAsset" parameterType="com.novaops.backend.ops.asset.model.AssetRecord">
     insert into biz_asset (
       id, asset_no, name, type, status, owner_id, location,
       spec, remark, purchase_date, version, created_at, updated_at, deleted
@@ -62,7 +62,7 @@
   </insert>
 
   <!-- 乐观锁：where 带 version，冲突时影响 0 行 -->
-  <update id="updateAsset" parameterType="com.novaops.backend.asset.model.AssetRecord">
+  <update id="updateAsset" parameterType="com.novaops.backend.ops.asset.model.AssetRecord">
     update biz_asset
     set name = #{name},
         type = #{type},
@@ -77,7 +77,7 @@
       and version = #{version}
   </update>
 
-  <select id="findByIds" resultType="com.novaops.backend.asset.model.AssetRecord">
+  <select id="findByIds" resultType="com.novaops.backend.ops.asset.model.AssetRecord">
     select id, asset_no, name, status
     from biz_asset
     where deleted = 0
@@ -87,19 +87,19 @@
       </foreach>
   </select>
 
-  <insert id="insertLog" parameterType="com.novaops.backend.asset.model.AssetLogRecord">
+  <insert id="insertLog" parameterType="com.novaops.backend.ops.asset.model.AssetLogRecord">
     insert into biz_asset_log (id, asset_id, action, operator_id, target_user_id, remark, created_at)
     values (#{id}, #{assetId}, #{action}, #{operatorId}, #{targetUserId}, #{remark}, #{createdAt})
   </insert>
 
-  <select id="listLogs" resultType="com.novaops.backend.asset.model.AssetLogRecord">
+  <select id="listLogs" resultType="com.novaops.backend.ops.asset.model.AssetLogRecord">
     select id, asset_id, action, operator_id, target_user_id, remark, created_at
     from biz_asset_log
     where asset_id = #{assetId}
     order by created_at desc, id desc
   </select>
 
-  <select id="listRelatedTickets" resultType="com.novaops.backend.asset.dto.RelatedTicket">
+  <select id="listRelatedTickets" resultType="com.novaops.backend.ops.asset.dto.RelatedTicket">
     select t.id, t.title, t.status, t.priority,
            t.assignee_id, u.display_name as assignee_name
     from biz_ticket t

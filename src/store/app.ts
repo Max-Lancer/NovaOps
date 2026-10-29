@@ -18,10 +18,10 @@ interface AppState {
   activeTabPath: string
 }
 
-const DASHBOARD_TAB: TabItem = {
-  title: 'Dashboard',
-  path: '/dashboard',
-  name: 'Dashboard',
+const HOME_TAB: TabItem = {
+  title: '工作台',
+  path: '/home',
+  name: 'Home',
   closable: false,
   keepAlive: true,
 }
@@ -29,8 +29,8 @@ const DASHBOARD_TAB: TabItem = {
 export const useAppStore = defineStore('app', {
   state: (): AppState => ({
     collapsed: false,
-    tabs: [DASHBOARD_TAB],
-    activeTabPath: '/dashboard',
+    tabs: [HOME_TAB],
+    activeTabPath: '/home',
   }),
   getters: {
     //把keep-alive缓存的找出来，再map加工
@@ -60,7 +60,7 @@ export const useAppStore = defineStore('app', {
           title: String(route.meta.title || name),
           path,
           name,
-          closable: path !== '/dashboard',
+          closable: path !== '/home',
           keepAlive: Boolean(route.meta.keepAlive),
         })
       }
@@ -76,14 +76,14 @@ export const useAppStore = defineStore('app', {
       //只要tabs里找到有当前激活路径的
       if (!this.tabs.find((tab) => tab.path === this.activeTabPath)) {
         //让当前激活路径为前一个或者dashboard
-        this.activeTabPath = this.tabs[this.tabs.length - 1]?.path || '/dashboard'
+        this.activeTabPath = this.tabs[this.tabs.length - 1]?.path || '/home'
       }
     },
 
     //重置tab栏为初始
     resetTabs() {
-      this.tabs = [DASHBOARD_TAB]
-      this.activeTabPath = '/dashboard'
+      this.tabs = [HOME_TAB]
+      this.activeTabPath = '/home'
     },
   },
 })

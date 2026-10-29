@@ -18,7 +18,7 @@ const handleLogin = async () => {
     message.success('登录成功')
     // redirect 只接受站内路径：必须以单个 / 开头，防止外部 URL 借 query 注入跳转
     const redirect = String(route.query.redirect || '')
-    const target = redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/dashboard'
+    const target = redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/home'
     await router.replace(target)
   } catch { /* 请求层统一提示 */ } finally { submitting.value = false }
 }

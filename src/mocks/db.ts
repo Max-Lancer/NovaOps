@@ -1,7 +1,7 @@
 import type { RoleDto, UserListItemDto, UserProfile } from '@/types/auth'
 import type { MenuDataDto, MenuItemDto } from '@/types/menu'
 
-type MenuTemplateKey = 'full' | 'staff' | 'guest'
+type MenuTemplateKey = 'full' | 'staff' | 'member' | 'guest'
 
 interface MockUser {
   id: string
@@ -78,7 +78,7 @@ const users: Record<string, MockUser> = {
 const dynamicUsers = new Map<string, MockUser>()
 
 export const roles: RoleDto[] = [
-  { id: 'role-admin', code: 'admin', name: '管理员', description: '管理用户、身份、知识库以及全部业务数据', permissions: ['auth:user:manage', 'dashboard:view', 'ticket:view', 'asset:view', 'kb:view', 'kb:edit', 'agent:chat'] },
+  { id: 'role-admin', code: 'admin', name: '管理员', description: '管理用户、身份、知识库以及全部业务数据', permissions: ['auth:user:manage', 'dashboard:view', 'ticket:view', 'asset:view', 'kb:view', 'kb:edit', 'agent:chat', 'system:observe'] },
   { id: 'role-staff', code: 'staff', name: '运维人员', description: '处理工单、资产与使用智能问答', permissions: ['dashboard:view', 'ticket:view', 'ticket:create', 'asset:view', 'agent:chat'] },
   { id: 'role-guest', code: 'guest', name: '访客', description: '只读访问授权看板与智能问答', permissions: ['dashboard:view', 'agent:chat'] },
   { id: 'role-member', code: 'member', name: '普通成员', description: '注册用户默认身份：只读看板、提交工单与智能问答', permissions: ['dashboard:view', 'ticket:create', 'agent:chat'] },
@@ -150,6 +150,9 @@ const permissionMap: Record<string, string[]> = {
     'auth:user:manage',
     'agent:chat',
     'agent:task',
+    'ticket:claim',
+    'ticket:claim:approve',
+    'system:observe',
   ],
   staff: [
     'dashboard:view',
@@ -159,24 +162,26 @@ const permissionMap: Record<string, string[]> = {
     'ticket:transfer',
     'ticket:comment',
     'ticket:advance',
+    'ticket:claim:approve',
     'asset:view',
     'asset:claim',
     'agent:chat',
     'agent:task',
   ],
-  guest: ['dashboard:view', 'agent:chat'],
-  member: ['dashboard:view', 'ticket:create', 'agent:chat'],
+  guest: ['agent:chat'],
+  member: ['ticket:create', 'ticket:claim', 'agent:chat'],
 }
 
 // 权限目录与后端允许配置的权限保持一致；Mock 数据仅保存在当前页面会话内。
 const labels: Record<string, string> = {
   'dashboard:view': '访问看板', 'ticket:view': '访问工单', 'ticket:create': '新建工单', 'ticket:edit': '编辑工单',
+  'ticket:claim': '待接与我的工单', 'ticket:claim:approve': '审批接单', 'system:observe': '查看系统详情',
   'ticket:assign': '指派工单', 'ticket:transfer': '转派工单', 'ticket:close': '关闭工单', 'ticket:comment': '评论工单',
   'ticket:advance': '提交复核', 'ticket:approve': '复核通过', 'ticket:reject': '驳回复核', 'asset:view': '访问资产',
   'asset:create': '新增资产', 'asset:edit': '编辑资产', 'asset:claim': '领用与接收资产', 'asset:scrap': '报废资产',
   'kb:view': '访问知识库', 'kb:edit': '维护知识库文档', 'agent:chat': '使用智能问答', 'agent:task': '使用智能体任务',
 }
-const groupNames: Record<string, string> = { dashboard: '看板', ticket: '工单', asset: '资产', kb: '知识库', agent: '智能体' }
+const groupNames: Record<string, string> = { dashboard: '看板', ticket: '工单', asset: '资产', kb: '知识库', agent: '智能体', system: '系统' }
 export const mockPermissionCatalog = Object.entries(labels).map(([code, name]) => ({ code, name, group: groupNames[code.split(':')[0]!]! }))
 roles.forEach(role => { role.permissions = [...(permissionMap[role.code] ?? [])] })
 export const saveMockRole = (id: string | undefined, data: { name: string; description: string; permissions: string[] }) => {
@@ -184,7 +189,7 @@ export const saveMockRole = (id: string | undefined, data: { name: string; descr
   const codes = new Set(data.permissions)
   if (codes.size !== data.permissions.length || [...codes].some(code => !labels[code])) throw new Error('权限包含重复项或系统不支持的权限')
   for (const prefix of ['ticket:', 'asset:', 'kb:']) {
-    if ([...codes].some(code => code.startsWith(prefix) && code !== prefix + 'view') && !codes.has(prefix + 'view')) throw new Error('配置业务操作前，请先授予对应页面的访问权限：' + prefix + 'view')
+    if ([...codes].some(code => code.startsWith(prefix) && code !== prefix + 'view' && code !== 'ticket:claim' && code !== 'ticket:create') && !codes.has(prefix + 'view')) throw new Error('配置业务操作前，请先授予对应页面的访问权限：' + prefix + 'view')
   }
   if (id === 'role-admin') throw new Error('系统管理员角色不可修改')
   const role = id ? roles.find(item => item.id === id) : undefined
@@ -200,56 +205,72 @@ export const deleteMockRole = (id: string) => {
   roles.splice(index, 1)
 }
 
-const menuTemplates: Record<MenuTemplateKey, MenuItemDto[]> = {
-  full: [
+const homeMenu = (id: string): MenuItemDto => ({
+  id,
+  title: '工作台',
+  name: 'Home',
+  path: '/home',
+  component: 'HomeView',
+  icon: 'home',
+  permission: 'agent:chat',
+  keepAlive: true,
+})
+
+const opsMenu = (id: string, includeAssets: boolean): MenuItemDto => ({
+  id,
+  title: '运维',
+  name: 'OpsRoot',
+  path: '/ops',
+  component: 'RouteView',
+  icon: 'ticket',
+  children: [
     {
-      id: 'dashboard',
-      title: 'Dashboard',
+      id: `${id}-dashboard`,
+      title: '运维看板',
       name: 'Dashboard',
-      path: '/dashboard',
+      path: '/ops/dashboard',
       component: 'DashboardView',
-      icon: 'dashboard',
       permission: 'dashboard:view',
       keepAlive: true,
     },
     {
-      id: 'ticket',
-      title: '工单',
-      name: 'TicketRoot',
-      path: '/ticket',
-      component: 'RouteView',
-      icon: 'ticket',
-      children: [
-        {
-          id: 'ticket-list',
-          title: '工单列表',
-          name: 'TicketList',
-          path: '/ticket/list',
-          component: 'TicketListView',
-          permission: 'ticket:view',
-          keepAlive: true,
-        },
-      ],
+      id: `${id}-tickets`,
+      title: '工单列表',
+      name: 'TicketList',
+      path: '/ops/ticket/list',
+      component: 'TicketListView',
+      permission: 'ticket:view',
+      keepAlive: true,
     },
-    {
-      id: 'asset',
-      title: '资产',
-      name: 'AssetRoot',
-      path: '/asset',
-      component: 'RouteView',
-      icon: 'asset',
-      children: [
-        {
-          id: 'asset-list',
+    ...(includeAssets
+      ? [{
+          id: `${id}-assets`,
           title: '资产列表',
           name: 'AssetList',
-          path: '/asset/list',
+          path: '/ops/asset/list',
           component: 'AssetListView',
           permission: 'asset:view',
           keepAlive: true,
-        },
-      ],
-    },
+        }]
+      : []),
+    ...(id === 'ops'
+      ? [{
+          id: `${id}-claim`,
+          title: '待接工单',
+          name: 'ClaimQueue',
+          path: '/ops/ticket/claim',
+          component: 'ClaimQueueView',
+          permission: 'ticket:claim',
+          keepAlive: true,
+        }]
+      : []),
+  ],
+})
+
+const menuTemplates: Record<MenuTemplateKey, MenuItemDto[]> = {
+  full: [
+    homeMenu('home'),
+    opsMenu('ops', true),
     {
       id: 'kb',
       title: '知识库',
@@ -272,50 +293,47 @@ const menuTemplates: Record<MenuTemplateKey, MenuItemDto[]> = {
     { id: 'agent-console', title: '智能体工作台', name: 'AgentConsole', path: '/agent/console', component: 'AgentConsoleView', icon: 'robot', permission: 'agent:task', keepAlive: true },
     { id: 'agent-tasks', title: '任务中心', name: 'AgentTasks', path: '/agent/tasks', component: 'AgentTasksView', icon: 'robot', permission: 'agent:task', keepAlive: true },
     { id: 'users', title: '用户与身份', name: 'UserManagement', path: '/system/users', component: 'UserManagementView', icon: 'user', permission: 'auth:user:manage', keepAlive: true },
-  ],
-  staff: [
     {
-      id: 'dashboard',
-      title: 'Dashboard',
-      name: 'Dashboard',
-      path: '/dashboard',
-      component: 'DashboardView',
-      icon: 'dashboard',
-      permission: 'dashboard:view',
-      keepAlive: true,
-    },
-    {
-      id: 'ticket',
-      title: '工单',
-      name: 'TicketRoot',
-      path: '/ticket',
+      id: 'system',
+      title: '系统详情',
+      name: 'SystemRoot',
+      path: '/system/observe',
       component: 'RouteView',
-      icon: 'ticket',
+      icon: 'monitor',
       children: [
         {
-          id: 'ticket-list',
-          title: '工单列表',
-          name: 'TicketList',
-          path: '/ticket/list',
-          component: 'TicketListView',
-          permission: 'ticket:view',
+          id: 'system-overview',
+          title: '运行概览',
+          name: 'SystemOverview',
+          path: '/system/overview',
+          component: 'SystemOverviewView',
+          permission: 'system:observe',
+          keepAlive: true,
+        },
+        {
+          id: 'system-logs',
+          title: '运行日志',
+          name: 'SystemLogs',
+          path: '/system/logs',
+          component: 'SystemLogsView',
+          permission: 'system:observe',
           keepAlive: true,
         },
       ],
     },
   ],
-  guest: [
-    {
-      id: 'dashboard',
-      title: 'Dashboard',
-      name: 'Dashboard',
-      path: '/dashboard',
-      component: 'DashboardView',
-      icon: 'dashboard',
-      permission: 'dashboard:view',
-      keepAlive: true,
-    },
+  staff: [
+    homeMenu('staff-home'),
+    opsMenu('staff-ops', true),
+    { id: 'staff-agent-console', title: '智能体工作台', name: 'AgentConsole', path: '/agent/console', component: 'AgentConsoleView', icon: 'robot', permission: 'agent:task', keepAlive: true },
+    { id: 'staff-agent-tasks', title: '任务中心', name: 'AgentTasks', path: '/agent/tasks', component: 'AgentTasksView', icon: 'robot', permission: 'agent:task', keepAlive: true },
   ],
+  member: [
+    homeMenu('member-home'),
+    { id: 'member-claim', title: '待接工单', name: 'ClaimQueue', path: '/ops/ticket/claim', component: 'ClaimQueueView', icon: 'ticket', permission: 'ticket:claim', keepAlive: true },
+    { id: 'member-mine', title: '我的工单', name: 'MyTickets', path: '/ops/ticket/mine', component: 'MyTicketsView', icon: 'ticket', permission: 'ticket:claim', keepAlive: true },
+  ],
+  guest: [homeMenu('guest-home')],
 }
 
 const accessTokenTable = new Map<string, SessionPayload>()
@@ -369,7 +387,10 @@ const resolveMenusByUser = (username: string): MenuItemDto[] => {
     if (menu.permission && !permissions.includes(menu.permission)) return []
     return [{ ...menu, children }]
   })
-  return filter(cloneMenu(menuTemplates.full))
+  const all = cloneMenu(menuTemplates.full)
+  const mine = menuTemplates.member.find(menu => menu.name === 'MyTickets')
+  if (mine) all.push({ ...mine })
+  return filter(all)
 }
 
 export const getUser = (username: string) => {

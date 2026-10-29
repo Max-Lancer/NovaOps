@@ -217,6 +217,19 @@ class AuthServiceTest {
   }
 
   @Test
+  void allowsMemberTicketPermissionsWithoutTicketListAccess() {
+    when(authMapper.findUserById("u-staff")).thenReturn(user("role-admin", true));
+    when(authMapper.findRoleById("role-admin")).thenReturn(role("role-admin", "admin"));
+    when(authMapper.lockRole("role-member")).thenReturn(role("role-member", "member"));
+    when(authMapper.listPermissionCodes()).thenReturn(List.of("ticket:create", "ticket:claim"));
+    when(authMapper.listPermissionsByRoleId("role-member")).thenReturn(List.of("ticket:create", "ticket:claim"));
+    when(authMapper.insertRolePermission(eq("role-member"), anyString())).thenReturn(1);
+    authService.updateRole(session(), "role-member", new RoleSaveRequest("成员", "", List.of("ticket:create", "ticket:claim")));
+    verify(authMapper).insertRolePermission("role-member", "ticket:create");
+    verify(authMapper).insertRolePermission("role-member", "ticket:claim");
+  }
+
+  @Test
   void refusesDeletingRoleStillUsedByUsers() {
     when(authMapper.findUserById("u-staff")).thenReturn(user("role-admin", true));
     when(authMapper.findRoleById("role-admin")).thenReturn(role("role-admin", "admin"));

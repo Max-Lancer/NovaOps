@@ -139,7 +139,10 @@ mysql -uroot -p novaops < backend/sql/novaops_init.sql
 ```bash
 mysql -uroot -p novaops < backend/sql/refactor_rag_migration.sql
 mysql -uroot -p novaops < backend/sql/add_agent_chat_execution_audit.sql
+mysql -uroot -p novaops < backend/sql/migration_system_observe.sql
 ```
+
+**已有数据库在使用「系统详情」（运行概览、运行日志）之前，必须先执行 `backend/sql/migration_system_observe.sql`。** 未执行时，相关接口会因缺少 `system:observe` 权限以及 `sys_module_check`、`sys_access_log` 表而失败。该脚本可重复执行。全新库只导入 `novaops_init.sql` 即可，其中已包含同等表结构（模块检查时间 `checked_at` 为毫秒精度 `datetime(3)`）。Docker 的 MySQL 数据卷若在该功能加入之前已经初始化，`docker compose up` 不会改旧卷，同样需要手工执行这份迁移。撤回用 `backend/sql/rollback_system_observe.sql`。
 
 #### 2. 启动 Qdrant
 
@@ -301,6 +304,15 @@ mvn -gs mvn-settings.xml test
 ```
 
 生产构建生成在 `dist/`，该目录已被 Git 忽略，可部署到 Nginx 等静态服务器。
+
+### CI
+
+每次向 `master` 推送，以及所有 pull request，都会在 GitHub Actions 中并行运行两项检查（见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)）：
+
+- **frontend**：Node.js 22，执行 `npm ci`、`npm run lint`、`npm run test`、`npm run build`。
+- **backend**：Java 17（Temurin），在 `backend/` 下执行 `mvn -B test`。测试使用 H2，不依赖 MySQL；依赖从 Maven Central 拉取。
+
+结果在仓库的 **Actions** 页，以及对应 pull request 的 **Checks** 中查看。仓库可以在分支保护规则里把 `frontend` 和 `backend` 设为合并前必须通过的检查。本地的 Husky 与 commitlint 仍然负责提交前拦截，CI 是远端门禁。
 
 ## 安全说明
 

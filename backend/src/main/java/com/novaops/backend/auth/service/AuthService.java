@@ -175,7 +175,11 @@ public class AuthService {
     }
 
     List<String> permissions = authMapper.listPermissions(user.getId());
-    List<MenuRecord> allMenus = authMapper.listMenusByScope("full");
+    List<MenuRecord> allMenus = new ArrayList<>(authMapper.listMenusByScope("full"));
+    // “我的工单”只在成员菜单中定义，按权限纳入统一菜单目录。
+    authMapper.listMenusByScope("member").stream()
+        .filter(menu -> "MyTickets".equals(menu.getName()))
+        .forEach(allMenus::add);
     List<MenuRecord> menuRecords = allMenus.stream().filter(menu ->
         "RouteView".equals(menu.getComponent()) || !StringUtils.hasText(menu.getPermissionCode())
             || permissions.contains(menu.getPermissionCode())).toList();
@@ -199,6 +203,9 @@ public class AuthService {
       new PermissionOption("dashboard:view", "访问看板", "看板"),
       new PermissionOption("ticket:view", "访问工单", "工单"),
       new PermissionOption("ticket:create", "新建工单", "工单"),
+      new PermissionOption("ticket:claim", "待接与我的工单", "工单"),
+      new PermissionOption("ticket:claim:approve", "审批接单", "工单"),
+      new PermissionOption("system:observe", "查看系统详情", "系统"),
       new PermissionOption("ticket:edit", "编辑工单", "工单"),
       new PermissionOption("ticket:assign", "指派工单", "工单"),
       new PermissionOption("ticket:transfer", "转派工单", "工单"),
@@ -231,7 +238,7 @@ public class AuthService {
     if (requested.size() != request.permissions().size() || !allowed.containsAll(requested))
       throw new BusinessException(400, "权限包含重复项或系统不支持的权限，请刷新后重试");
     for (String prefix : List.of("ticket:", "asset:", "kb:")) {
-      if (requested.stream().anyMatch(p -> p.startsWith(prefix) && !p.equals(prefix + "view")) && !requested.contains(prefix + "view"))
+      if (requested.stream().anyMatch(p -> p.startsWith(prefix) && !p.equals(prefix + "view") && !p.equals("ticket:claim") && !p.equals("ticket:create")) && !requested.contains(prefix + "view"))
         throw new BusinessException(400, "配置业务操作前，请先授予对应页面的访问权限：" + prefix + "view");
     }
   }

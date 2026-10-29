@@ -253,7 +253,7 @@ const scrapAsset = (record: AssetListItemDto) => {
 }
 
 const toDetail = (id: string) => {
-  void router.push(`/asset/detail/${id}`)
+  void router.push(`/ops/asset/detail/${id}`)
 }
 
 const handlePageChange = async (value: number) => {

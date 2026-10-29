@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setupAntd } from '@/plugins/antd'
@@ -11,6 +12,9 @@ import {
   ticketActionApi,
 } from '@/api/ticket'
 import type { TicketDetailDto, TicketListItemDto } from '@/types/ticket'
+import { useAuthStore } from '@/store/auth'
+import { usePermissionStore } from '@/store/permission'
+import Permission from '@/components/Permission.vue'
 import TicketDetail from './detail.vue'
 import TicketList from './list.vue'
 
@@ -73,7 +77,12 @@ const mountPage = async (
   path: string,
   component: typeof TicketList | typeof TicketDetail,
   stubs: StubOverrides = {},
+  realPermission = false,
+  prepare?: () => void,
 ) => {
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  prepare?.()
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path, component }],
@@ -81,11 +90,16 @@ const mountPage = async (
   const target = path.replace(':id', ticket.id)
   await router.push(target)
   await router.isReady()
+  const pageStubs: Record<string, { template: string }> = { ...globalOptions.stubs, ...stubs }
+  if (realPermission) {
+    delete pageStubs.Permission
+  }
   return mount(component, {
     global: {
       ...globalOptions,
-      plugins: [antdPlugin, router],
-      stubs: { ...globalOptions.stubs, ...stubs },
+      plugins: [antdPlugin, pinia, router],
+      stubs: pageStubs,
+      components: realPermission ? { Permission } : {},
     },
   })
 }
@@ -205,6 +219,27 @@ describe('ticket pages person contract', () => {
     await vm.doAction('advance')
 
     expect(ticketActionApi).not.toHaveBeenCalled()
+  })
+
+  it('lets the assignee submit review and comment without ticket permissions', async () => {
+    const wrapper = await mountPage('/ticket/detail/:id', TicketDetail, {}, true, () => {
+      const authStore = useAuthStore()
+      authStore.user = {
+        id: 'u-staff',
+        username: 'staff',
+        displayName: 'Support Staff',
+        roles: ['member'],
+        permissions: [],
+      }
+      usePermissionStore().codes = []
+    })
+    await flushPromises()
+
+    const buttonLabels = wrapper.findAll('button').map((button) => button.text().replace(/\s/g, ''))
+    expect(buttonLabels).toContain('提交复核')
+    expect(buttonLabels).not.toContain('关闭')
+    expect(buttonLabels).not.toContain('转派')
+    expect(wrapper.text()).toContain('发表评论')
   })
 
   it('shows list actions only for statuses accepted by the backend state machine', async () => {

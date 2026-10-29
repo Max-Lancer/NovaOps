@@ -1,15 +1,40 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { PlusOutlined } from '@ant-design/icons-vue'
 import { Conversations } from 'vue-element-plus-x'
 import type { ConversationItem } from 'vue-element-plus-x/types/Conversations'
 import ChatCore from '@/components/agent/ChatCore.vue'
+import { useChat } from '@/composables/useChat'
 import { useChatStore } from '@/store/chat'
 import type { ConversationDto } from '@/types/agent'
 
 defineOptions({ name: 'AgentChat' })
 
+const route = useRoute()
+const router = useRouter()
 const store = useChatStore()
+const { send } = useChat()
+
+const questionFromRoute = () => {
+  const value = route.query.q
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) return value[0] || ''
+  return ''
+}
+
+watch(
+  questionFromRoute,
+  (question) => {
+    const text = question.trim()
+    if (!text) return
+    const nextQuery = { ...route.query }
+    delete nextQuery.q
+    void router.replace({ path: route.path, query: nextQuery })
+    void send(text)
+  },
+  { immediate: true },
+)
 const conversationItems = computed<Array<ConversationItem<ConversationDto>>>(() =>
   store.conversations.map((item) => ({ ...item, label: item.title })),
 )

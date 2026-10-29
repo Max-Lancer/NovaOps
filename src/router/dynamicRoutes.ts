@@ -8,14 +8,19 @@ type RouteComponentLoader = () => Promise<unknown>
 //后端只存组件名字符串，不存路径，所以前端需要这张表做字符串 → 实际组件的映射。
 // 同时用 () => import(...) 函数形式，实现路由懒加载
 const routeComponentMap: Record<string, RouteComponentLoader> = {
-  DashboardView: () => import('@/views/dashboard/index.vue'),
+  HomeView: () => import('@/views/home/index.vue'),
+  DashboardView: () => import('@/views/ops/dashboard/index.vue'),
   TicketListView: () => import('@/views/ticket/list.vue'),
+  ClaimQueueView: () => import('@/views/ticket/claim.vue'),
+  MyTicketsView: () => import('@/views/ticket/mine.vue'),
   TicketDetailView: () => import('@/views/ticket/detail.vue'),
   AssetListView: () => import('@/views/asset/list.vue'),
   KbListView: () => import('@/views/kb/list.vue'),
   AgentConsoleView: () => import('@/views/agent/console.vue'),
   AgentTasksView: () => import('@/views/agent/tasks.vue'),
   UserManagementView: () => import('@/views/system/users.vue'),
+  SystemOverviewView: () => import('@/views/system/overview.vue'),
+  SystemLogsView: () => import('@/views/system/logs.vue'),
 }
 
 //后端菜单数据里，有子菜单的父级节点 component 字段存的是 'RouteView'，
