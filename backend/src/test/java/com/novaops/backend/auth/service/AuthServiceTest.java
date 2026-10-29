@@ -15,6 +15,7 @@ import com.novaops.backend.auth.dto.RefreshTokenRequest;
 import com.novaops.backend.auth.dto.RegisterRequest;
 import com.novaops.backend.auth.dto.RegisterResponse;
 import com.novaops.backend.auth.dto.RoleResponse;
+import com.novaops.backend.auth.dto.RoleSaveRequest;
 import com.novaops.backend.auth.dto.UserOptionResponse;
 import com.novaops.backend.auth.mail.EmailSender;
 import com.novaops.backend.auth.mapper.AuthMapper;
@@ -194,6 +195,42 @@ class AuthServiceTest {
     assertThatThrownBy(() -> authService.refresh(request))
         .isInstanceOf(BusinessException.class)
         .hasMessageContaining("已失效");
+  }
+
+  @Test
+  void rejectsUnknownPermissionEvenWhenPresentInDatabase() {
+    when(authMapper.findUserById("u-staff")).thenReturn(user("role-admin", true));
+    when(authMapper.findRoleById("role-admin")).thenReturn(role("role-admin", "admin"));
+    when(authMapper.listPermissionCodes()).thenReturn(List.of("ticket:view", "invented:permission"));
+    var request = new RoleSaveRequest("test", "", List.of("invented:permission"));
+    assertThatThrownBy(() -> authService.createRole(session(), request)).hasMessageContaining("系统不支持");
+    verify(authMapper, never()).insertRole(anyString(), anyString(), anyString(), anyString());
+  }
+
+  @Test
+  void blocksOperationWithoutPageAccess() {
+    when(authMapper.findUserById("u-staff")).thenReturn(user("role-admin", true));
+    when(authMapper.findRoleById("role-admin")).thenReturn(role("role-admin", "admin"));
+    when(authMapper.listPermissionCodes()).thenReturn(List.of("kb:view", "kb:edit"));
+    assertThatThrownBy(() -> authService.createRole(session(), new RoleSaveRequest("test", "", List.of("kb:edit"))))
+        .hasMessageContaining("kb:view");
+  }
+
+  @Test
+  void refusesDeletingRoleStillUsedByUsers() {
+    when(authMapper.findUserById("u-staff")).thenReturn(user("role-admin", true));
+    when(authMapper.findRoleById("role-admin")).thenReturn(role("role-admin", "admin"));
+    when(authMapper.lockRole("custom")).thenReturn(role("custom", "custom"));
+    when(authMapper.countUsersByRole("custom")).thenReturn(1L);
+    assertThatThrownBy(() -> authService.deleteRole(session(), "custom")).hasMessageContaining("关联用户");
+    verify(authMapper, never()).deleteRole("custom");
+  }
+
+  @Test
+  void nonAdminCannotManageRoles() {
+    when(authMapper.findUserById("u-staff")).thenReturn(user("role-staff", true));
+    when(authMapper.findRoleById("role-staff")).thenReturn(role("role-staff", "staff"));
+    assertThatThrownBy(() -> authService.permissionCatalog(session())).hasMessageContaining("仅系统管理员");
   }
 
   private RefreshTokenRecord refreshToken(String token, boolean revoked) {

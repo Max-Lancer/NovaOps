@@ -55,6 +55,18 @@ export const setupRouterGuard = (router: Router) => {
       return to.fullPath
     }
 
+    // 默认首页没有访问权限时，跳到第一个可见页面；无页面则进入 403。
+    if (to.path === '/dashboard' && !permissionStore.hasPermission('dashboard:view')) {
+      const firstLeaf = (menus: typeof permissionStore.menus): string | undefined => {
+        for (const menu of menus) {
+          if (menu.component !== 'RouteView') return menu.path
+          const child = firstLeaf(menu.children ?? [])
+          if (child) return child
+        }
+      }
+      return firstLeaf(permissionStore.menus) || '/403'
+    }
+
     //路由的 meta 里定义的权限码，用户想访问需要有对应的码才行
     const permissionCode = to.meta.permission as string | undefined
     if (permissionCode && !permissionStore.hasPermission(permissionCode)) {

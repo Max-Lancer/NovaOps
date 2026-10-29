@@ -55,7 +55,7 @@ public class KbUploadSessionService {
   }
 
   public UploadInitResponse init(CurrentSession session, UploadInitRequest request) {
-    authService.assertAdmin(session);
+    authService.requirePermission(session, "kb:edit");
     String extension = storage.extension(request.getFileName());
     String hash = normalizeHash(request.getContentHash());
     if (request.getFileSize() > properties.getMaxFileSizeBytes()) {
@@ -105,7 +105,7 @@ public class KbUploadSessionService {
   }
 
   public void uploadChunk(CurrentSession session, String sessionId, int index, MultipartFile file) {
-    authService.assertAdmin(session);
+    authService.requirePermission(session, "kb:edit");
     KbUploadSessionRecord record = requireSession(sessionId);
     if (!"UPLOADING".equals(record.getStatus())) {
       throw new BusinessException(409, "上传会话已结束，请重新初始化");
@@ -136,7 +136,7 @@ public class KbUploadSessionService {
   }
 
   public KbDocumentRecord merge(CurrentSession session, String sessionId) {
-    authService.assertAdmin(session);
+    authService.requirePermission(session, "kb:edit");
     KbUploadSessionRecord record = requireSession(sessionId);
     if (record.getDocumentId() != null) {
       return documentMapper.findDocument(record.getDocumentId());

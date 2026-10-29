@@ -1,13 +1,43 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { Modal, message, type TablePaginationConfig, type TableProps } from 'ant-design-vue'
-import { getRolesApi, getUsersApi, resetUserPasswordApi, updateUserRoleApi, updateUserStatusApi } from '@/api/auth'
-import type { RoleDto, UserListItemDto } from '@/types/auth'
+import { getRolesApi, getUsersApi, getPermissionCatalogApi, createRoleApi, updateRoleApi, deleteRoleApi, resetUserPasswordApi, updateUserRoleApi, updateUserStatusApi } from '@/api/auth'
+import type { RoleDto, UserListItemDto, PermissionOption } from '@/types/auth'
 
 defineOptions({ name: 'UserManagement' })
 const loading = ref(false)
 const users = ref<UserListItemDto[]>([])
 const roles = ref<RoleDto[]>([])
+const catalog = ref<PermissionOption[]>([])
+const roleOpen = ref(false)
+const roleSaving = ref(false)
+const editingRole = ref<RoleDto>()
+const roleForm = reactive({ name: '', description: '', permissions: [] as string[] })
+const permissionGroups = computed(() => catalog.value.reduce<Record<string, PermissionOption[]>>((groups, item) => { (groups[item.group] ??= []).push(item); return groups }, {}))
+const loadRoles = async () => { roles.value = await getRolesApi() }
+const editRole = (role?: RoleDto) => {
+  editingRole.value = role
+  roleForm.name = role?.name ?? ''
+  roleForm.description = role?.description ?? ''
+  roleForm.permissions = [...(role?.permissions ?? [])].filter(code => catalog.value.some(item => item.code === code))
+  roleOpen.value = true
+}
+const saveRole = async () => {
+  if (!roleForm.name.trim()) { message.warning('请输入角色名称'); return }
+  roleSaving.value = true
+  try {
+    const data = { name: roleForm.name.trim(), description: roleForm.description.trim(), permissions: roleForm.permissions }
+    if (editingRole.value) await updateRoleApi(editingRole.value.id, data)
+    else await createRoleApi(data)
+    roleOpen.value = false
+    message.success('角色已保存，相关用户刷新页面后可看到最新菜单')
+    await loadRoles()
+  } finally { roleSaving.value = false }
+}
+const removeRole = (role: RoleDto) => Modal.confirm({
+  title: `确认删除角色“${role.name}”？`, content: '如仍有用户使用该角色，请先调整用户身份。',
+  async onOk() { await deleteRoleApi(role.id); message.success('角色已删除'); await loadRoles() },
+})
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
@@ -45,15 +75,19 @@ const resetPassword = async () => {
   await resetUserPasswordApi(selectedUser.value.id, password.value); passwordOpen.value = false; message.success('密码已重置')
 }
 
-onMounted(async () => { roles.value = await getRolesApi(); await fetchUsers() })
+onMounted(async () => { await Promise.all([loadRoles(), getPermissionCatalogApi().then(data => { catalog.value = data }), fetchUsers()]) })
 </script>
 
 <template>
   <div class="user-page">
-    <a-card title="身份目录" class="role-card">
+    <a-card title="角色与权限" class="role-card">
+      <template #extra><a-button type="primary" @click="editRole()">新增角色</a-button></template>
+      <p>系统管理员角色受保护；系统预设角色不能删除。业务操作需同时授予对应页面访问权限。</p>
       <a-row :gutter="16">
         <a-col v-for="role in roles" :key="role.id" :xs="24" :lg="8">
-          <a-card size="small" class="role-item"><a-statistic :title="role.name" :value="role.permissions.length" suffix="项权限" /><p>{{ role.description }}</p><a-space wrap><a-tag v-for="code in role.permissions" :key="code">{{ code }}</a-tag></a-space></a-card>
+          <a-card size="small" class="role-item"><a-statistic :title="role.name" :value="role.permissions.length" suffix="项权限" /><p>{{ role.description }}</p><a-space wrap><a-tag v-for="code in role.permissions" :key="code">{{ catalog.find(item => item.code === code)?.name || code }}</a-tag></a-space>
+            <div class="role-actions" v-if="role.id !== 'role-admin'"><a-button size="small" @click="editRole(role)">编辑</a-button><a-button v-if="!['role-staff', 'role-guest', 'role-member'].includes(role.id)" size="small" danger @click="removeRole(role)">删除</a-button></div>
+          </a-card>
         </a-col>
       </a-row>
     </a-card>
@@ -72,10 +106,18 @@ onMounted(async () => { roles.value = await getRolesApi(); await fetchUsers() })
         </template>
       </a-table>
     </a-card>
+    <a-modal v-model:open="roleOpen" :title="editingRole ? '编辑角色' : '新增角色'" :confirm-loading="roleSaving" width="720px" @ok="saveRole">
+      <a-form layout="vertical"><a-form-item label="角色名称" required><a-input v-model:value="roleForm.name" :maxlength="100" /></a-form-item>
+        <a-form-item label="角色说明"><a-input v-model:value="roleForm.description" :maxlength="255" /></a-form-item>
+        <a-form-item label="权限配置"><p>勾选已有页面与操作；业务操作需要对应的页面访问权限。</p>
+          <a-checkbox-group v-model:value="roleForm.permissions" class="permission-groups"><section v-for="(items, group) in permissionGroups" :key="group"><strong>{{ group }}</strong><div><a-checkbox v-for="item in items" :key="item.code" :value="item.code">{{ item.name }} <small>{{ item.code }}</small></a-checkbox></div></section></a-checkbox-group>
+        </a-form-item>
+      </a-form>
+    </a-modal>
     <a-modal v-model:open="passwordOpen" title="重置密码" ok-text="确认重置" @ok="resetPassword"><a-input-password v-model:value="password" placeholder="至少 6 位" /></a-modal>
   </div>
 </template>
 
 <style scoped>
-.user-page { display: grid; gap: 16px; }.role-item { height: 100%; }.role-item p { min-height: 44px; color: var(--nova-text-secondary); }.filters { margin-bottom: 18px; }
+.user-page { display: grid; gap: 16px; }.role-item { height: 100%; }.role-item p { min-height: 44px; color: var(--nova-text-secondary); }.filters { margin-bottom: 18px; }.role-actions { display: flex; gap: 8px; margin-top: 16px; }.permission-groups { display: grid; gap: 14px; width: 100%; }.permission-groups section div { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 6px; }.permission-groups small { color: var(--nova-text-secondary); }
 </style>

@@ -87,6 +87,15 @@
     limit 1
   </select>
 
+  <select id="listPermissionCodes" resultType="string">select code from sys_permission</select>
+  <insert id="insertRole">insert into sys_role (id, code, name, description, sort_order) values (#{id}, #{code}, #{name}, #{description}, 100)</insert>
+  <update id="updateRole">update sys_role set name = #{name}, description = #{description} where id = #{id}</update>
+  <delete id="deleteRole">delete from sys_role where id = #{id}</delete>
+  <delete id="deleteRolePermissions">delete from sys_role_permission where role_id = #{id}</delete>
+  <insert id="insertRolePermission">insert into sys_role_permission (role_id, permission_id) select #{id}, id from sys_permission where code = #{code}</insert>
+  <select id="countUsersByRole" resultType="long">select count(*) from sys_user where role_id = #{id}</select>
+  <select id="lockRole" resultType="com.novaops.backend.auth.dto.RoleResponse">select id, code, name, description from sys_role where id = #{id} for update</select>
+
   <select id="listPermissionsByRoleId" resultType="string">
     select distinct p.code from sys_permission p
     inner join sys_role_permission rp on rp.permission_id = p.id

@@ -149,6 +149,7 @@ const permissionMap: Record<string, string[]> = {
     'kb:edit',
     'auth:user:manage',
     'agent:chat',
+    'agent:task',
   ],
   staff: [
     'dashboard:view',
@@ -161,9 +162,42 @@ const permissionMap: Record<string, string[]> = {
     'asset:view',
     'asset:claim',
     'agent:chat',
+    'agent:task',
   ],
   guest: ['dashboard:view', 'agent:chat'],
   member: ['dashboard:view', 'ticket:create', 'agent:chat'],
+}
+
+// 权限目录与后端允许配置的权限保持一致；Mock 数据仅保存在当前页面会话内。
+const labels: Record<string, string> = {
+  'dashboard:view': '访问看板', 'ticket:view': '访问工单', 'ticket:create': '新建工单', 'ticket:edit': '编辑工单',
+  'ticket:assign': '指派工单', 'ticket:transfer': '转派工单', 'ticket:close': '关闭工单', 'ticket:comment': '评论工单',
+  'ticket:advance': '提交复核', 'ticket:approve': '复核通过', 'ticket:reject': '驳回复核', 'asset:view': '访问资产',
+  'asset:create': '新增资产', 'asset:edit': '编辑资产', 'asset:claim': '领用与接收资产', 'asset:scrap': '报废资产',
+  'kb:view': '访问知识库', 'kb:edit': '维护知识库文档', 'agent:chat': '使用智能问答', 'agent:task': '使用智能体任务',
+}
+const groupNames: Record<string, string> = { dashboard: '看板', ticket: '工单', asset: '资产', kb: '知识库', agent: '智能体' }
+export const mockPermissionCatalog = Object.entries(labels).map(([code, name]) => ({ code, name, group: groupNames[code.split(':')[0]!]! }))
+roles.forEach(role => { role.permissions = [...(permissionMap[role.code] ?? [])] })
+export const saveMockRole = (id: string | undefined, data: { name: string; description: string; permissions: string[] }) => {
+  if (!data.name?.trim() || data.name.length > 100 || data.description.length > 255) throw new Error('角色名称或说明不合法')
+  const codes = new Set(data.permissions)
+  if (codes.size !== data.permissions.length || [...codes].some(code => !labels[code])) throw new Error('权限包含重复项或系统不支持的权限')
+  for (const prefix of ['ticket:', 'asset:', 'kb:']) {
+    if ([...codes].some(code => code.startsWith(prefix) && code !== prefix + 'view') && !codes.has(prefix + 'view')) throw new Error('配置业务操作前，请先授予对应页面的访问权限：' + prefix + 'view')
+  }
+  if (id === 'role-admin') throw new Error('系统管理员角色不可修改')
+  const role = id ? roles.find(item => item.id === id) : undefined
+  if (id && !role) throw new Error('角色不存在')
+  if (role) Object.assign(role, { name: data.name.trim(), description: data.description.trim(), permissions: [...codes] })
+  else { const code = `role-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; roles.push({ id: code, code, name: data.name.trim(), description: data.description.trim(), permissions: [...codes] }) }
+}
+export const deleteMockRole = (id: string) => {
+  if (['role-admin', 'role-staff', 'role-guest', 'role-member'].includes(id)) throw new Error('系统预设角色不可删除')
+  const index = roles.findIndex(role => role.id === id)
+  if (index < 0) throw new Error('角色不存在')
+  if (allUsers().some(user => user.roles.includes(roles[index]!.code))) throw new Error('角色仍有关联用户，请先调整用户身份')
+  roles.splice(index, 1)
 }
 
 const menuTemplates: Record<MenuTemplateKey, MenuItemDto[]> = {
@@ -235,6 +269,8 @@ const menuTemplates: Record<MenuTemplateKey, MenuItemDto[]> = {
         },
       ],
     },
+    { id: 'agent-console', title: '智能体工作台', name: 'AgentConsole', path: '/agent/console', component: 'AgentConsoleView', icon: 'robot', permission: 'agent:task', keepAlive: true },
+    { id: 'agent-tasks', title: '任务中心', name: 'AgentTasks', path: '/agent/tasks', component: 'AgentTasksView', icon: 'robot', permission: 'agent:task', keepAlive: true },
     { id: 'users', title: '用户与身份', name: 'UserManagement', path: '/system/users', component: 'UserManagementView', icon: 'user', permission: 'auth:user:manage', keepAlive: true },
   ],
   staff: [
@@ -325,15 +361,15 @@ const cloneMenu = (menus: MenuItemDto[]): MenuItemDto[] => {
 }
 
 const resolveMenusByUser = (username: string): MenuItemDto[] => {
-  const user = users[username] || dynamicUsers.get(username)
-  const roleCode = user?.roles?.[0]
-  if (roleCode === 'guest') {
-    return cloneMenu(menuTemplates.guest)
-  }
-  if (roleCode === 'staff') {
-    return cloneMenu(menuTemplates.staff)
-  }
-  return cloneMenu(menuTemplates.full)
+  const roleCode = (users[username] || dynamicUsers.get(username))?.roles[0] || 'guest'
+  const permissions = resolvePermissions(username, roleCode)
+  const filter = (menus: MenuItemDto[]): MenuItemDto[] => menus.flatMap(menu => {
+    const children = menu.children ? filter(menu.children) : undefined
+    if (menu.component === 'RouteView' && !children?.length) return []
+    if (menu.permission && !permissions.includes(menu.permission)) return []
+    return [{ ...menu, children }]
+  })
+  return filter(cloneMenu(menuTemplates.full))
 }
 
 export const getUser = (username: string) => {
@@ -406,8 +442,8 @@ export const getSessionFromAccessToken = (authorization: string | null) => {
 
 // 按「用户名 → 角色码」的优先级取权限表；未知角色兜底为空权限，
 // 绝不能兜底 admin——否则脏数据会凭空获得管理员权限
-const resolvePermissions = (username: string, roleCode: string): string[] =>
-  permissionMap[username] ?? permissionMap[roleCode] ?? []
+const resolvePermissions = (_username: string, roleCode: string): string[] =>
+  roles.find(role => role.code === roleCode)?.permissions ?? []
 
 export const buildUserProfile = (username: string): UserProfile => {
   const user = users[username] || dynamicUsers.get(username)

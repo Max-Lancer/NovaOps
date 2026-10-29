@@ -33,7 +33,7 @@ public class KbDocumentService {
   }
 
   public KbDocumentRecord upload(CurrentSession session, String title, MultipartFile file) {
-    authService.assertAdmin(session);
+    authService.requirePermission(session, "kb:edit");
     String original = file.getOriginalFilename() == null ? "document" : file.getOriginalFilename();
     String id = IdGenerator.randomId("doc");
     // 落盘同时算出内容摘要：文件名与摘要绑定，同一内容不会写第二份文件
@@ -70,7 +70,7 @@ public class KbDocumentService {
   }
 
   public PageResult<KbDocumentRecord> list(CurrentSession session, KbDocumentQuery query) {
-    authService.assertAdmin(session);
+    authService.requirePermission(session, "kb:view");
     int offset = (query.getPage() - 1) * query.getPageSize();
     return new PageResult<>(
         mapper.listDocuments(query.getKeyword(), query.getFileType(), query.getStatus(), offset, query.getPageSize()),
@@ -80,31 +80,31 @@ public class KbDocumentService {
   }
 
   public KbDocumentRecord detail(CurrentSession session, String id) {
-    authService.assertAdmin(session);
+    authService.requirePermission(session, "kb:view");
     return requireDocument(id);
   }
 
   public List<KbChunkRecord> chunks(CurrentSession session, String id) {
-    authService.assertAdmin(session);
+    authService.requirePermission(session, "kb:view");
     requireDocument(id);
     return mapper.listChunks(id);
   }
 
   public void updateTitle(CurrentSession session, String id, String title) {
-    authService.assertAdmin(session);
+    authService.requirePermission(session, "kb:edit");
     requireDocument(id);
     mapper.updateTitle(id, title.trim());
   }
 
   public void delete(CurrentSession session, String id) {
-    authService.assertAdmin(session);
+    authService.requirePermission(session, "kb:edit");
     // 经独立 bean 调用，保证 remove 上的 @Transactional 生效（自调用会绕过 Spring 代理）
     removal.remove(requireDocument(id));
   }
 
   /** 仅允许 FAILED 文档重试：源文件仍在校验通过后重置状态并重新走解析流水线。 */
   public KbDocumentRecord retry(CurrentSession session, String id) {
-    authService.assertAdmin(session);
+    authService.requirePermission(session, "kb:edit");
     KbDocumentRecord document = requireDocument(id);
     if (!"FAILED".equals(document.getStatus())) {
       throw new BusinessException(409, "仅解析失败的文档可以重试");
@@ -123,7 +123,7 @@ public class KbDocumentService {
    * 解析时才能复用未变分块的既有向量，而不是整篇重新 embedding。
    */
   public KbDocumentRecord replace(CurrentSession session, String id, String title, MultipartFile file) {
-    authService.assertAdmin(session);
+    authService.requirePermission(session, "kb:edit");
     KbDocumentRecord document = requireDocument(id);
     String original = file.getOriginalFilename() == null ? document.getFileName() : file.getOriginalFilename();
     // 落盘会先做类型/大小/非空校验：校验失败时数据库不动，旧文档原样保留

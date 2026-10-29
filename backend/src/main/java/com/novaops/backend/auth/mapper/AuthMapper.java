@@ -37,6 +37,15 @@ public interface AuthMapper {
 
   RoleResponse findRoleById(@Param("roleId") String roleId);
 
+  List<String> listPermissionCodes();
+  void insertRole(@Param("id") String id, @Param("code") String code, @Param("name") String name, @Param("description") String description);
+  void updateRole(@Param("id") String id, @Param("name") String name, @Param("description") String description);
+  void deleteRole(@Param("id") String id);
+  void deleteRolePermissions(@Param("id") String id);
+  int insertRolePermission(@Param("id") String id, @Param("code") String code);
+  long countUsersByRole(@Param("id") String id);
+  RoleResponse lockRole(@Param("id") String id);
+
   List<String> listPermissionsByRoleId(@Param("roleId") String roleId);
 
   List<UserListItemResponse> listUsers(

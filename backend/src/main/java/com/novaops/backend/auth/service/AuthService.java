@@ -9,6 +9,10 @@ import com.novaops.backend.auth.dto.RefreshTokenRequest;
 import com.novaops.backend.auth.dto.RegisterRequest;
 import com.novaops.backend.auth.dto.RegisterResponse;
 import com.novaops.backend.auth.dto.RoleResponse;
+import com.novaops.backend.auth.dto.RoleSaveRequest;
+import com.novaops.backend.auth.dto.PermissionOption;
+import java.util.Set;
+import java.util.HashSet;
 import com.novaops.backend.auth.dto.UserProfileResponse;
 import com.novaops.backend.auth.dto.UserListQuery;
 import com.novaops.backend.auth.dto.UserListItemResponse;
@@ -171,9 +175,13 @@ public class AuthService {
     }
 
     List<String> permissions = authMapper.listPermissions(user.getId());
-    List<String> roles = authMapper.listRolesByUserId(user.getId());
-    String menuScope = roles.isEmpty() ? "guest" : resolveMenuScopeByRole(roles.get(0));
-    List<MenuRecord> menuRecords = authMapper.listMenusByScope(menuScope);
+    List<MenuRecord> allMenus = authMapper.listMenusByScope("full");
+    List<MenuRecord> menuRecords = allMenus.stream().filter(menu ->
+        "RouteView".equals(menu.getComponent()) || !StringUtils.hasText(menu.getPermissionCode())
+            || permissions.contains(menu.getPermissionCode())).toList();
+    Set<String> parentsWithChildren = new HashSet<>();
+    menuRecords.forEach(menu -> { if (StringUtils.hasText(menu.getParentId())) parentsWithChildren.add(menu.getParentId()); });
+    menuRecords = menuRecords.stream().filter(menu -> !"RouteView".equals(menu.getComponent()) || parentsWithChildren.contains(menu.getId())).toList();
     MenuDataResponse response = new MenuDataResponse();
     response.setPermissions(permissions);
     response.setMenus(buildMenuTree(menuRecords));
@@ -184,6 +192,88 @@ public class AuthService {
     List<RoleResponse> roles = authMapper.listRoles();
     roles.forEach(role -> role.setPermissions(authMapper.listPermissionsByRoleId(role.getId())));
     return roles;
+  }
+
+  // 可分配权限由代码定义，数据库中意外出现的权限码不能通过管理接口授权。
+  private static final List<PermissionOption> MANAGED_PERMISSIONS = List.of(
+      new PermissionOption("dashboard:view", "访问看板", "看板"),
+      new PermissionOption("ticket:view", "访问工单", "工单"),
+      new PermissionOption("ticket:create", "新建工单", "工单"),
+      new PermissionOption("ticket:edit", "编辑工单", "工单"),
+      new PermissionOption("ticket:assign", "指派工单", "工单"),
+      new PermissionOption("ticket:transfer", "转派工单", "工单"),
+      new PermissionOption("ticket:close", "关闭工单", "工单"),
+      new PermissionOption("ticket:comment", "评论工单", "工单"),
+      new PermissionOption("ticket:advance", "提交复核", "工单"),
+      new PermissionOption("ticket:approve", "复核通过", "工单"),
+      new PermissionOption("ticket:reject", "驳回复核", "工单"),
+      new PermissionOption("asset:view", "访问资产", "资产"),
+      new PermissionOption("asset:create", "新增资产", "资产"),
+      new PermissionOption("asset:edit", "编辑资产", "资产"),
+      new PermissionOption("asset:claim", "领用与接收资产", "资产"),
+      new PermissionOption("asset:scrap", "报废资产", "资产"),
+      new PermissionOption("kb:view", "访问知识库", "知识库"),
+      new PermissionOption("kb:edit", "维护知识库文档", "知识库"),
+      new PermissionOption("agent:chat", "使用智能问答", "智能体"),
+      new PermissionOption("agent:task", "使用智能体任务", "智能体"));
+  private static final Set<String> SYSTEM_ROLE_IDS = Set.of("role-admin", "role-staff", "role-guest", "role-member");
+
+  public List<PermissionOption> permissionCatalog(CurrentSession session) {
+    requireAdmin(session);
+    Set<String> present = new HashSet<>(authMapper.listPermissionCodes());
+    return MANAGED_PERMISSIONS.stream().filter(p -> present.contains(p.code())).toList();
+  }
+
+  private void validateRolePermissions(RoleSaveRequest request) {
+    Set<String> allowed = new HashSet<>(authMapper.listPermissionCodes());
+    allowed.retainAll(MANAGED_PERMISSIONS.stream().map(PermissionOption::code).toList());
+    Set<String> requested = new HashSet<>(request.permissions());
+    if (requested.size() != request.permissions().size() || !allowed.containsAll(requested))
+      throw new BusinessException(400, "权限包含重复项或系统不支持的权限，请刷新后重试");
+    for (String prefix : List.of("ticket:", "asset:", "kb:")) {
+      if (requested.stream().anyMatch(p -> p.startsWith(prefix) && !p.equals(prefix + "view")) && !requested.contains(prefix + "view"))
+        throw new BusinessException(400, "配置业务操作前，请先授予对应页面的访问权限：" + prefix + "view");
+    }
+  }
+
+  @Transactional
+  public void createRole(CurrentSession session, RoleSaveRequest request) {
+    requireAdmin(session);
+    validateRolePermissions(request);
+    String id = IdGenerator.randomId("role");
+    authMapper.insertRole(id, id, request.name().trim(), request.description().trim());
+    saveRolePermissions(id, request.permissions());
+  }
+
+  @Transactional
+  public void updateRole(CurrentSession session, String id, RoleSaveRequest request) {
+    requireAdmin(session);
+    RoleResponse role = authMapper.lockRole(id);
+    if (role == null) throw new BusinessException(404, "角色不存在");
+    if ("role-admin".equals(id)) throw new BusinessException(400, "系统管理员角色不可修改");
+    validateRolePermissions(request);
+    Set<String> known = new HashSet<>(MANAGED_PERMISSIONS.stream().map(PermissionOption::code).toList());
+    if (!known.containsAll(authMapper.listPermissionsByRoleId(id)))
+      throw new BusinessException(409, "角色包含不可配置的权限，请由系统管理员检查权限数据");
+    authMapper.updateRole(id, request.name().trim(), request.description().trim());
+    authMapper.deleteRolePermissions(id);
+    saveRolePermissions(id, request.permissions());
+  }
+
+  private void saveRolePermissions(String id, List<String> permissions) {
+    for (String code : permissions) {
+      if (authMapper.insertRolePermission(id, code) != 1) throw new BusinessException(400, "权限已发生变化，请刷新后重试");
+    }
+  }
+
+  @Transactional
+  public void deleteRole(CurrentSession session, String id) {
+    requireAdmin(session);
+    if (authMapper.lockRole(id) == null) throw new BusinessException(404, "角色不存在");
+    if (SYSTEM_ROLE_IDS.contains(id)) throw new BusinessException(400, "系统预设角色不可删除");
+    if (authMapper.countUsersByRole(id) > 0) throw new BusinessException(409, "角色仍有关联用户，请先调整用户身份");
+    authMapper.deleteRolePermissions(id);
+    authMapper.deleteRole(id);
   }
 
   public List<UserOptionResponse> listUserOptions() {
@@ -206,9 +296,11 @@ public class AuthService {
     authMapper.revokeRefreshTokens(userId);
   }
 
+  @Transactional
   public void updateUserRole(CurrentSession session, String userId, String roleId) {
     requireAdmin(session);
-    if (authMapper.findRoleById(roleId) == null) throw new BusinessException(400, "身份不存在");
+    if (authMapper.lockRole(roleId) == null) throw new BusinessException(400, "身份不存在");
+    if (session.getUserId().equals(userId) && !"role-admin".equals(roleId)) throw new BusinessException(400, "不能移除当前管理员的管理员身份");
     requireUser(userId);
     authMapper.updateUserRole(userId, roleId);
     authMapper.revokeRefreshTokens(userId);
@@ -281,16 +373,6 @@ public class AuthService {
     response.setRefreshToken(refreshToken);
     response.setExpiresIn(jwtService.getAccessTokenExpireSeconds());
     return response;
-  }
-
-  private String resolveMenuScopeByRole(String roleCode) {
-    if ("guest".equals(roleCode) || "member".equals(roleCode)) {
-      return "guest";
-    }
-    if ("staff".equals(roleCode)) {
-      return "staff";
-    }
-    return "full";
   }
 
   private List<MenuItemResponse> buildMenuTree(List<MenuRecord> menuRecords) {

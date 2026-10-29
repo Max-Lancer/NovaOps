@@ -3,6 +3,7 @@ package com.novaops.backend.kb.controller;
 import com.novaops.backend.common.api.ApiResponse;
 import com.novaops.backend.common.api.PageResult;
 import com.novaops.backend.common.security.RequestContext;
+import com.novaops.backend.common.security.RequirePermission;
 import com.novaops.backend.kb.dto.KbDocumentQuery;
 import com.novaops.backend.kb.dto.UpdateDocumentTitleRequest;
 import com.novaops.backend.kb.model.KbChunkRecord;
@@ -26,7 +27,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController @RequestMapping("/api/kb/documents")
 public class KbController {
   private final KbDocumentService service; private final QdrantVectorGateway qdrant; public KbController(KbDocumentService service,QdrantVectorGateway qdrant){this.service=service;this.qdrant=qdrant;}
-  @GetMapping("/health") public ApiResponse<java.util.Map<String,Object>> health(){return ApiResponse.success(java.util.Map.of("qdrantAvailable",qdrant.healthy()));}
+  @GetMapping("/health") @RequirePermission("kb:view") public ApiResponse<java.util.Map<String,Object>> health(){return ApiResponse.success(java.util.Map.of("qdrantAvailable",qdrant.healthy()));}
   @PostMapping public ApiResponse<KbDocumentRecord> upload(@RequestParam(required=false) String title,@RequestPart("file") MultipartFile file){return ApiResponse.success(service.upload(RequestContext.getRequired(),title,file),"文件已上传，正在解析");}
   @GetMapping public ApiResponse<PageResult<KbDocumentRecord>> list(@Valid KbDocumentQuery query){return ApiResponse.success(service.list(RequestContext.getRequired(),query));}
   @GetMapping("/{id}") public ApiResponse<KbDocumentRecord> detail(@PathVariable String id){return ApiResponse.success(service.detail(RequestContext.getRequired(),id));}
