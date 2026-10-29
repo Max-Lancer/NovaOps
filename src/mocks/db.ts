@@ -188,6 +188,7 @@ export const saveMockRole = (id: string | undefined, data: { name: string; descr
   if (!data.name?.trim() || data.name.length > 100 || data.description.length > 255) throw new Error('角色名称或说明不合法')
   const codes = new Set(data.permissions)
   if (codes.size !== data.permissions.length || [...codes].some(code => !labels[code])) throw new Error('权限包含重复项或系统不支持的权限')
+  if (codes.has('ticket:create') && !codes.has('agent:chat') && !codes.has('ticket:view')) throw new Error('配置新建工单权限时，请同时选择使用智能问答或访问工单，以便用户进入创建页面')
   for (const prefix of ['ticket:', 'asset:', 'kb:']) {
     if ([...codes].some(code => code.startsWith(prefix) && code !== prefix + 'view' && code !== 'ticket:claim' && code !== 'ticket:create') && !codes.has(prefix + 'view')) throw new Error('配置业务操作前，请先授予对应页面的访问权限：' + prefix + 'view')
   }

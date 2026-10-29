@@ -221,12 +221,38 @@ class AuthServiceTest {
     when(authMapper.findUserById("u-staff")).thenReturn(user("role-admin", true));
     when(authMapper.findRoleById("role-admin")).thenReturn(role("role-admin", "admin"));
     when(authMapper.lockRole("role-member")).thenReturn(role("role-member", "member"));
-    when(authMapper.listPermissionCodes()).thenReturn(List.of("ticket:create", "ticket:claim"));
-    when(authMapper.listPermissionsByRoleId("role-member")).thenReturn(List.of("ticket:create", "ticket:claim"));
+    when(authMapper.listPermissionCodes()).thenReturn(List.of("ticket:create", "ticket:claim", "agent:chat"));
+    when(authMapper.listPermissionsByRoleId("role-member")).thenReturn(List.of("ticket:create", "ticket:claim", "agent:chat"));
     when(authMapper.insertRolePermission(eq("role-member"), anyString())).thenReturn(1);
-    authService.updateRole(session(), "role-member", new RoleSaveRequest("成员", "", List.of("ticket:create", "ticket:claim")));
+    authService.updateRole(session(), "role-member", new RoleSaveRequest("成员", "", List.of("ticket:create", "ticket:claim", "agent:chat")));
     verify(authMapper).insertRolePermission("role-member", "ticket:create");
     verify(authMapper).insertRolePermission("role-member", "ticket:claim");
+    verify(authMapper).insertRolePermission("role-member", "agent:chat");
+  }
+
+  @Test
+  void rejectsTicketCreationWithoutAccessibleEntryOnCreateAndUpdate() {
+    when(authMapper.findUserById("u-staff")).thenReturn(user("role-admin", true));
+    when(authMapper.findRoleById("role-admin")).thenReturn(role("role-admin", "admin"));
+    when(authMapper.listPermissionCodes()).thenReturn(List.of("ticket:create", "ticket:view", "agent:chat"));
+    when(authMapper.lockRole("custom")).thenReturn(role("custom", "custom"));
+    var request = new RoleSaveRequest("自定义", "", List.of("ticket:create"));
+    assertThatThrownBy(() -> authService.createRole(session(), request)).hasMessageContaining("请同时选择");
+    assertThatThrownBy(() -> authService.updateRole(session(), "custom", request)).hasMessageContaining("请同时选择");
+    verify(authMapper, never()).insertRole(anyString(), anyString(), anyString(), anyString());
+    verify(authMapper, never()).deleteRolePermissions(anyString());
+  }
+
+  @Test
+  void acceptsTicketCreationWithTicketListAccess() {
+    when(authMapper.findUserById("u-staff")).thenReturn(user("role-admin", true));
+    when(authMapper.findRoleById("role-admin")).thenReturn(role("role-admin", "admin"));
+    when(authMapper.lockRole("custom")).thenReturn(role("custom", "custom"));
+    when(authMapper.listPermissionCodes()).thenReturn(List.of("ticket:create", "ticket:view"));
+    when(authMapper.insertRolePermission(eq("custom"), anyString())).thenReturn(1);
+    authService.updateRole(session(), "custom", new RoleSaveRequest("自定义", "", List.of("ticket:create", "ticket:view")));
+    verify(authMapper).insertRolePermission("custom", "ticket:view");
+    verify(authMapper, never()).insertRolePermission("custom", "agent:chat");
   }
 
   @Test

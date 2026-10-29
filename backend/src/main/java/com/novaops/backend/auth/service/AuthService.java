@@ -237,6 +237,8 @@ public class AuthService {
     Set<String> requested = new HashSet<>(request.permissions());
     if (requested.size() != request.permissions().size() || !allowed.containsAll(requested))
       throw new BusinessException(400, "权限包含重复项或系统不支持的权限，请刷新后重试");
+    if (requested.contains("ticket:create") && !requested.contains("agent:chat") && !requested.contains("ticket:view"))
+      throw new BusinessException(400, "配置新建工单权限时，请同时选择使用智能问答或访问工单，以便用户进入创建页面");
     for (String prefix : List.of("ticket:", "asset:", "kb:")) {
       if (requested.stream().anyMatch(p -> p.startsWith(prefix) && !p.equals(prefix + "view") && !p.equals("ticket:claim") && !p.equals("ticket:create")) && !requested.contains(prefix + "view"))
         throw new BusinessException(400, "配置业务操作前，请先授予对应页面的访问权限：" + prefix + "view");
